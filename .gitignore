@@ -1,0 +1,28 @@
+# Build
+/target/
+/build/
+/out/
+
+# Spring Boot
+*.log
+HELP.md
+
+# IDE - IntelliJ IDEA
+/.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDE - Eclipse / VSCode
+.classpath
+.project
+.settings/
+.factorypath
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+/logs/
