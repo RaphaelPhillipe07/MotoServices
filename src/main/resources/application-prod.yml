@@ -1,0 +1,25 @@
+# Perfil de produção: sem valores padrão — a aplicação falha ao iniciar
+# se DB_URL/DB_USER/DB_PASS não estiverem definidos no ambiente.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+# Documentação interativa desabilitada em produção.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: warn
+    br.com.motoservices: info

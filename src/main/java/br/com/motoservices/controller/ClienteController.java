@@ -3,6 +3,7 @@ package br.com.motoservices.controller;
 import br.com.motoservices.bo.ClienteBO;
 import br.com.motoservices.vo.ClienteVO;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +24,7 @@ public class ClienteController {
     private final ClienteBO clienteBO;
 
     @PostMapping
-    public ResponseEntity<ClienteVO> cadastrar(@RequestBody ClienteVO clienteVO) {
+    public ResponseEntity<ClienteVO> cadastrar(@Valid @RequestBody ClienteVO clienteVO) {
         return ResponseEntity.ok(clienteBO.cadastrar(clienteVO));
     }
 
