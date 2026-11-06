@@ -15,6 +15,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "TB_SERVICO_DA_OFICINA", schema = "MOTOSERVICES")
 @Inheritance(strategy = InheritanceType.JOINED)
@@ -34,8 +36,8 @@ public abstract class ServicoDaOficina implements Precificavel {
     @Column(name = "tempo_estimado")
     private Integer tempoEstimado;
 
-    @Column(name = "valor_base_mao_de_obra", nullable = false)
-    private Double valorBaseMaoDeObra;
+    @Column(name = "valor_base_mao_de_obra", nullable = false, precision = 12, scale = 2)
+    private BigDecimal valorBaseMaoDeObra;
 
     @ManyToOne
     @JoinColumn(name = "ordem_de_servico_id")

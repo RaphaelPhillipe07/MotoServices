@@ -11,6 +11,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "TB_PECA", schema = "MOTOSERVICES")
 @Getter
@@ -29,8 +31,8 @@ public class Peca {
     @Column(nullable = false)
     private String descricao;
 
-    @Column(nullable = false)
-    private Double valor;
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal valor;
 
     @Column(name = "quantidade_estoque", nullable = false)
     private Integer quantidadeEstoque;

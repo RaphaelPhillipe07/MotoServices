@@ -1,6 +1,8 @@
 package br.com.motoservices.model;
 
+import java.math.BigDecimal;
+
 public interface Precificavel {
 
-    double calcularValorFinal(Moto moto);
+    BigDecimal calcularValorFinal(Moto moto);
 }

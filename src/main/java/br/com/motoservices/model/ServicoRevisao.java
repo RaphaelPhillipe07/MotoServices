@@ -9,6 +9,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "TB_SERVICO_REVISAO", schema = "MOTOSERVICES")
 @PrimaryKeyJoinColumn(name = "servico_id")
@@ -22,8 +24,7 @@ public class ServicoRevisao extends ServicoDaOficina {
     private Boolean checklistGeral;
 
     @Override
-    public double calcularValorFinal(Moto moto) {
-        // TODO: aplicar fator de risco por cilindrada
-        throw new UnsupportedOperationException("Regra de precificação ainda não implementada.");
+    public BigDecimal calcularValorFinal(Moto moto) {
+        return Precificacao.maoDeObraComFator(getValorBaseMaoDeObra(), moto);
     }
 }

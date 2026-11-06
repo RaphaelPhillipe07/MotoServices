@@ -10,7 +10,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.validator.constraints.br.CPF;
 
 import java.time.LocalDate;
 
@@ -29,8 +28,12 @@ public class Cliente {
     @Column(nullable = false)
     private String nome;
 
+    /**
+     * CPF (11 dígitos) ou CNPJ (14 dígitos), sempre sem pontuação.
+     * A validação dos dígitos verificadores fica em {@code Documento} / {@code ClienteBO},
+     * pois uma única constraint de CPF rejeitaria CNPJs.
+     */
     @Column(nullable = false, unique = true)
-    @CPF
     private String cpfCnpj;
 
     @Column(nullable = false)

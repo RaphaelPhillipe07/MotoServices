@@ -1,6 +1,9 @@
 package br.com.motoservices.model;
 
+import br.com.motoservices.exception.TransicaoStatusInvalidaException;
+import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.enums.StatusOS;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -20,6 +23,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "TB_ORDEM_DE_SERVICO", schema = "MOTOSERVICES")
@@ -45,7 +49,7 @@ public class OrdemDeServico {
     @Column(nullable = false)
     private StatusOS status;
 
-    @OneToMany(mappedBy = "ordemDeServico")
+    @OneToMany(mappedBy = "ordemDeServico", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ServicoDaOficina> servicos = new ArrayList<>();
 
     @Column(name = "data_abertura", nullable = false)
@@ -55,7 +59,38 @@ public class OrdemDeServico {
     private LocalDateTime dataFechamento;
 
     public void adicionarServico(ServicoDaOficina servico) {
-        // TODO: garantir referência bidirecional quando ServicoDaOficina tiver FK de OS.
+        Objects.requireNonNull(servico, "Serviço é obrigatório");
+        if (status != null && !status.permiteAdicionarServico()) {
+            throw new ValidacaoException(
+                    "Não é possível adicionar serviços a uma OS com status " + status + ".");
+        }
+        servico.setOrdemDeServico(this);
         servicos.add(servico);
+    }
+
+    public void removerServico(ServicoDaOficina servico) {
+        if (servico != null && servicos.remove(servico)) {
+            servico.setOrdemDeServico(null);
+        }
+    }
+
+    /**
+     * Aplica uma transição de status validada pela máquina de estados da OS.
+     */
+    public void alterarStatus(StatusOS novoStatus) {
+        if (status == null) {
+            throw new ValidacaoException("OS sem status definido.");
+        }
+        if (novoStatus == null) {
+            throw new ValidacaoException("Novo status é obrigatório.");
+        }
+        if (!status.podeTransicionarPara(novoStatus)) {
+            throw new TransicaoStatusInvalidaException(
+                    "Transição de status inválida: " + status + " → " + novoStatus + ".");
+        }
+        this.status = novoStatus;
+        if (novoStatus.isEncerrada() && dataFechamento == null) {
+            this.dataFechamento = LocalDateTime.now();
+        }
     }
 }

@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -14,7 +16,7 @@ public class PecaVO {
     private Long id;
     private String codigo;
     private String descricao;
-    private Double valor;
+    private BigDecimal valor;
     private Integer quantidadeEstoque;
     private Integer estoqueMinimo;
 }

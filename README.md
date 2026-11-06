@@ -164,7 +164,7 @@ Mecânico      View          BO              DAO            Banco
    │                          │               │               │
    │── calcularOrcamento() ──────────────────────────────────►│
    │            │             │  [loop] s.calcularValorFinal(moto) // polimorfismo
-   │            │             │  [se >= 6 peças loja] desconto = totalPecas * 0.03
+   │            │             │  [se >= 5 peças loja] desconto = totalPecas * 0.05
    │◄── OrcamentoVO ──────────│               │               │
    │                          │               │               │
    │── confirmarOS() ────────────────────────────────────────►│
@@ -219,10 +219,10 @@ Peca                        OrdemDeServico
 + isAbaixoDoMinimo(): bool  - dataFechamento: LocalDateTime
 
 OrcamentoVO (Value Object)   Exceptions
-- totalPecas: double         EstoqueInsuficienteException
-- totalMaoDeObra: double     MotoInvalidaException
-- descontoAplicado: double   ClienteNaoEncontradoException
-- totalFinal: double
+- totalPecas: BigDecimal     EstoqueInsuficienteException
+- totalMaoDeObra: BigDecimal MotoInvalidaException
+- descontoAplicado: BigDecimal ClienteNaoEncontradoException
+- totalFinal: BigDecimal
 
 BO Layer                        DAO Layer
 OrdemDeServicoBO                OrdemDeServicoDAO
@@ -240,18 +240,20 @@ MotoBO                          MotoDAO
 **`OrdemDeServicoBOTest`**
 
 ```
-- `testeDescontoAplicado()` — desconto de 3% ativo com ≥ 6 peças da loja
-- `testeSemDesconto()` — sem desconto com ≥ 6 peças
+- `testeDescontoAplicado()` — desconto de 5% ativo com ≥ 5 peças da loja
+- `testeSemDesconto()` — sem desconto com menos de 5 peças da loja
 - `testeMotoMaoDeObraExtra()` — cilindradas > 400 cc gera acréscimo de 50% e > 650 cc gera acréscimo de 70% na mão de obra
 - `testePecaAvulsa()` — peça comprada por fora: cobra só mão de obra
 - `testeExcecaoEstoqueInsuficiente()` — exceção ao usar peça sem estoque
 - `testeExcecaoMotoInvalida()` — exceção ao buscar moto inexistente
 - `testeExcecaoClienteNaoEncontrado()` — exceção ao buscar cliente inexistente
 - `testeTotaisDoOrcamentoVOEstaoCorretos()` — totais do VO consistentes com as regras
+- `testeConfirmarOS()` — confirmação sem baixa dupla de estoque
+- `testeFecharOS()` — fechamento com agendamento da próxima revisão
 
 ```
 
-**`OrdemDeServicoDAOTest`**
+**`OrdemDeServicoDAOTest`** *(planejado — testes de integração com Testcontainers)*
 ```
 - `testeInserirOS()` — persistência de nova OS no banco
 - `testeAtualizarStatusOS()` — transição de status refletida na tabela

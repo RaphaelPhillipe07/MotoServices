@@ -5,17 +5,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrcamentoVO {
 
-    private Double totalPecas;
+    private BigDecimal totalPecas;
 
-    private Double totalMaoDeObra;
+    private BigDecimal totalMaoDeObra;
 
-    private Double descontoAplicado;
+    private BigDecimal descontoAplicado;
 
-    private Double totalFinal;
+    private BigDecimal totalFinal;
 }

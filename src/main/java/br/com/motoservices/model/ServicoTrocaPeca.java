@@ -1,5 +1,6 @@
 package br.com.motoservices.model;
 
+import br.com.motoservices.exception.ValidacaoException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
@@ -10,6 +11,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "TB_SERVICO_TROCA_PECA", schema = "MOTOSERVICES")
@@ -28,9 +31,26 @@ public class ServicoTrocaPeca extends ServicoDaOficina {
     private Boolean pecaFornecidaPelaLoja;
 
     @Override
-    public double calcularValorFinal(Moto moto) {
-        // TODO: aplicar fator de risco por cilindrada na mão de obra e, quando
-        //       pecaFornecidaPelaLoja = true, somar o valor da peça
-        throw new UnsupportedOperationException("Regra de precificação ainda não implementada.");
+    public BigDecimal calcularValorFinal(Moto moto) {
+        BigDecimal maoDeObra = Precificacao.maoDeObraComFator(getValorBaseMaoDeObra(), moto);
+        if (!usaPecaDaLoja()) {
+            return maoDeObra;
+        }
+        if (pecaEnvolvida == null || pecaEnvolvida.getValor() == null) {
+            throw new ValidacaoException(
+                    "Serviço de troca de peça fornecida pela loja exige uma peça com valor cadastrado.");
+        }
+        return Precificacao.arredondar(maoDeObra.add(pecaEnvolvida.getValor()));
+    }
+
+    public BigDecimal valorDaPecaDaLoja() {
+        if (!usaPecaDaLoja() || pecaEnvolvida == null) {
+            return Precificacao.zero();
+        }
+        return Precificacao.arredondar(pecaEnvolvida.getValor());
+    }
+
+    public boolean usaPecaDaLoja() {
+        return Boolean.TRUE.equals(pecaFornecidaPelaLoja);
     }
 }

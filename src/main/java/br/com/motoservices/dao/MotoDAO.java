@@ -10,7 +10,7 @@ import java.util.Optional;
 @Repository
 public interface MotoDAO extends JpaRepository<Moto, Long> {
 
-    Optional<Moto> findByMarcaAndModelo(String marca, String modelo);
+    Optional<Moto> findByMarcaIgnoreCaseAndModeloIgnoreCase(String marca, String modelo);
 
     List<Moto> findByCilindradasBetween(int minimo, int maximo);
 }
