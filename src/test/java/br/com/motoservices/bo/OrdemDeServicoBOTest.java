@@ -1,5 +1,6 @@
 package br.com.motoservices.bo;
 
+import br.com.motoservices.dao.HistoricoStatusOSDAO;
 import br.com.motoservices.dao.OrdemDeServicoDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
 import br.com.motoservices.exception.EstoqueInsuficienteException;
@@ -8,6 +9,7 @@ import br.com.motoservices.exception.OrdemDeServicoNaoEncontradaException;
 import br.com.motoservices.exception.TransicaoStatusInvalidaException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.Cliente;
+import br.com.motoservices.model.HistoricoStatusOS;
 import br.com.motoservices.model.Moto;
 import br.com.motoservices.model.OrdemDeServico;
 import br.com.motoservices.model.Peca;
@@ -19,6 +21,7 @@ import br.com.motoservices.model.enums.TipoServico;
 import br.com.motoservices.vo.OrcamentoResponseVO;
 import br.com.motoservices.vo.OrdemDeServicoRequestVO;
 import br.com.motoservices.vo.OrdemDeServicoResponseVO;
+import br.com.motoservices.vo.HistoricoStatusResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import br.com.motoservices.vo.ServicoRequestVO;
 import org.junit.jupiter.api.DisplayName;
@@ -59,6 +62,8 @@ class OrdemDeServicoBOTest {
 
     @Mock
     private OrdemDeServicoDAO ordemDeServicoDAO;
+    @Mock
+    private HistoricoStatusOSDAO historicoStatusOSDAO;
     @Mock
     private MotoBO motoBO;
     @Mock
@@ -101,7 +106,7 @@ class OrdemDeServicoBOTest {
     }
 
     private ServicoTrocaPeca troca(long pecaId, String valorPeca, boolean daLoja) {
-        Peca peca = new Peca(pecaId, "P-00" + pecaId, "Peça", new BigDecimal(valorPeca), 10, 2);
+        Peca peca = new Peca(pecaId, "P-00" + pecaId, "Peça", new BigDecimal(valorPeca), 10, 2, null);
         ServicoTrocaPeca troca = new ServicoTrocaPeca(peca, daLoja);
         troca.setDescricao("Troca de peça");
         troca.setValorBaseMaoDeObra(new BigDecimal("100.00"));
@@ -333,7 +338,7 @@ class OrdemDeServicoBOTest {
     void testeAdicionarTrocaPecaPorRequest() {
         OrdemDeServico os = os(StatusOS.ABERTA, 300);
         stubOS(os);
-        Peca peca = new Peca(1L, "P-001", "Pastilha", new BigDecimal("80.00"), 5, 2);
+        Peca peca = new Peca(1L, "P-001", "Pastilha", new BigDecimal("80.00"), 5, 2, null);
         when(estoqueBO.encontrarPeca(1L)).thenReturn(peca);
 
         ordemDeServicoBO.adicionarServico(OS_ID,
@@ -383,6 +388,7 @@ class OrdemDeServicoBOTest {
         assertThrows(TransicaoStatusInvalidaException.class,
                 () -> ordemDeServicoBO.confirmarOS(OS_ID));
         verify(estoqueBO, times(1)).baixarEstoque(1L, 1);
+        verify(historicoStatusOSDAO, times(1)).save(any(HistoricoStatusOS.class));
     }
 
     @Test
@@ -398,6 +404,44 @@ class OrdemDeServicoBOTest {
         assertEquals(StatusOS.FECHADA, os.getStatus());
         assertNotNull(os.getDataFechamento());
         assertEquals(new BigDecimal("200.00"), orcamento.getTotalFinal());
+        assertEquals(new BigDecimal("100.00"), os.getTotalPecas());
+        assertEquals(new BigDecimal("100.00"), os.getTotalMaoDeObra());
+        assertEquals(new BigDecimal("0.00"), os.getDescontoAplicado());
+        assertEquals(new BigDecimal("200.00"), os.getTotalFinal());
         verify(clienteBO).agendarProximaRevisao(CLIENTE_ID, proxima);
+        verify(historicoStatusOSDAO, times(1)).save(any(HistoricoStatusOS.class));
+    }
+
+    @Test
+    @DisplayName("fechar a partir de EM_ANDAMENTO registra duas transições")
+    void testeFecharOSComDuasTransicoes() {
+        OrdemDeServico os = os(StatusOS.EM_ANDAMENTO, 300, troca(1, "100.00", true));
+        stubOS(os);
+        when(clienteBO.calcularProximaRevisao(any(LocalDate.class)))
+                .thenReturn(LocalDate.now().plusMonths(6));
+
+        ordemDeServicoBO.fecharOS(OS_ID);
+
+        assertEquals(StatusOS.FECHADA, os.getStatus());
+        verify(historicoStatusOSDAO, times(2)).save(any(HistoricoStatusOS.class));
+    }
+
+    @Test
+    @DisplayName("histórico de status devolve as transições registradas")
+    void testeListarHistorico() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 300);
+        stubOS(os);
+        Pageable pageable = PageRequest.of(0, 20);
+        HistoricoStatusOS entrada = new HistoricoStatusOS(1L, os, null, StatusOS.ABERTA,
+                LocalDateTime.now());
+        when(historicoStatusOSDAO.findByOrdemDeServicoId(OS_ID, pageable))
+                .thenReturn(new PageImpl<>(List.of(entrada)));
+
+        PaginaResponseVO<HistoricoStatusResponseVO> pagina =
+                ordemDeServicoBO.listarHistorico(OS_ID, pageable);
+
+        assertEquals(1, pagina.getContent().size());
+        assertEquals(StatusOS.ABERTA, pagina.getContent().get(0).getStatusNovo());
+        assertEquals(OS_ID, pagina.getContent().get(0).getOsId());
     }
 }

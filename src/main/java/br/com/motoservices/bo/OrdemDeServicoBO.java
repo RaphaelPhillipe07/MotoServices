@@ -1,10 +1,13 @@
 package br.com.motoservices.bo;
 
+import br.com.motoservices.dao.HistoricoStatusOSDAO;
 import br.com.motoservices.dao.OrdemDeServicoDAO;
 import br.com.motoservices.exception.OrdemDeServicoNaoEncontradaException;
 import br.com.motoservices.exception.ValidacaoException;
+import br.com.motoservices.mapper.HistoricoStatusMapper;
 import br.com.motoservices.mapper.OrdemDeServicoMapper;
 import br.com.motoservices.model.Cliente;
+import br.com.motoservices.model.HistoricoStatusOS;
 import br.com.motoservices.model.Moto;
 import br.com.motoservices.model.OrdemDeServico;
 import br.com.motoservices.model.Peca;
@@ -17,6 +20,7 @@ import br.com.motoservices.model.enums.TipoServico;
 import br.com.motoservices.vo.OrcamentoResponseVO;
 import br.com.motoservices.vo.OrdemDeServicoRequestVO;
 import br.com.motoservices.vo.OrdemDeServicoResponseVO;
+import br.com.motoservices.vo.HistoricoStatusResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import br.com.motoservices.vo.ServicoRequestVO;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +42,7 @@ public class OrdemDeServicoBO {
     public static final int QUANTIDADE_POR_SERVICO = 1;
 
     private final OrdemDeServicoDAO ordemDeServicoDAO;
+    private final HistoricoStatusOSDAO historicoStatusOSDAO;
     private final MotoBO motoBO;
     private final ClienteBO clienteBO;
     private final EstoqueBO estoqueBO;
@@ -54,7 +59,9 @@ public class OrdemDeServicoBO {
         os.setMoto(moto);
         os.setStatus(StatusOS.ABERTA);
         os.setDataAbertura(LocalDateTime.now());
-        return ordemDeServicoDAO.save(os);
+        OrdemDeServico salva = ordemDeServicoDAO.save(os);
+        registrarHistorico(salva, null, StatusOS.ABERTA);
+        return salva;
     }
 
     @Transactional
@@ -80,6 +87,17 @@ public class OrdemDeServicoBO {
         return PaginaResponseVO.de(
                 ordemDeServicoDAO.findByClienteId(clienteId, paginacao),
                 OrdemDeServicoMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public PaginaResponseVO<HistoricoStatusResponseVO> listarHistorico(Long osId, Pageable pageable) {
+        OrdemDeServico os = encontrarOS(osId);
+        Pageable paginacao = pageable == null
+                ? PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "dataHora"))
+                : pageable;
+        return PaginaResponseVO.de(
+                historicoStatusOSDAO.findByOrdemDeServicoId(os.getId(), paginacao),
+                HistoricoStatusMapper::toResponse);
     }
 
     // ---------- serviços ----------
@@ -163,6 +181,7 @@ public class OrdemDeServicoBO {
     @Transactional
     public OrdemDeServicoResponseVO confirmarOS(Long osId) {
         OrdemDeServico os = encontrarOS(osId);
+        StatusOS statusAnterior = os.getStatus();
         os.alterarStatus(StatusOS.EM_ANDAMENTO);
 
         for (ServicoDaOficina servico : os.getServicos()) {
@@ -172,6 +191,7 @@ public class OrdemDeServicoBO {
         }
 
         ordemDeServicoDAO.save(os);
+        registrarHistorico(os, statusAnterior, StatusOS.EM_ANDAMENTO);
         return OrdemDeServicoMapper.toResponse(os);
     }
 
@@ -183,10 +203,20 @@ public class OrdemDeServicoBO {
         OrdemDeServico os = encontrarOS(osId);
         OrcamentoResponseVO orcamento = calcularOrcamento(os);
 
+        // Congela o orçamento: alterações posteriores em peças não mudam o valor cobrado.
+        os.setTotalPecas(orcamento.getTotalPecas());
+        os.setTotalMaoDeObra(orcamento.getTotalMaoDeObra());
+        os.setDescontoAplicado(orcamento.getDescontoAplicado());
+        os.setTotalFinal(orcamento.getTotalFinal());
+
         if (os.getStatus() != StatusOS.CONCLUIDA) {
+            StatusOS statusAnterior = os.getStatus();
             os.alterarStatus(StatusOS.CONCLUIDA);
+            registrarHistorico(os, statusAnterior, StatusOS.CONCLUIDA);
         }
+        StatusOS statusAnteriorFechamento = os.getStatus();
         os.alterarStatus(StatusOS.FECHADA);
+        registrarHistorico(os, statusAnteriorFechamento, StatusOS.FECHADA);
 
         LocalDate proximaRevisao = clienteBO.calcularProximaRevisao(LocalDate.now());
         clienteBO.agendarProximaRevisao(os.getCliente().getId(), proximaRevisao);
@@ -228,8 +258,16 @@ public class OrdemDeServicoBO {
         return new OrcamentoResponseVO(totalPecas, totalMaoDeObra, desconto, totalFinal);
     }
 
-    private static void validarServico(ServicoDaOficina servico) {
-        if (servico == null) {
+    private void registrarHistorico(OrdemDeServico os, StatusOS statusAnterior, StatusOS statusNovo) {
+        HistoricoStatusOS historico = new HistoricoStatusOS();
+        historico.setOrdemDeServico(os);
+        historico.setStatusAnterior(statusAnterior);
+        historico.setStatusNovo(statusNovo);
+        historico.setDataHora(LocalDateTime.now());
+        historicoStatusOSDAO.save(historico);
+    }
+
+    private static void validarServico(ServicoDaOficina servico) {        if (servico == null) {
             throw new ValidacaoException("Serviço é obrigatório.");
         }
         if (servico.getDescricao() == null || servico.getDescricao().isBlank()) {

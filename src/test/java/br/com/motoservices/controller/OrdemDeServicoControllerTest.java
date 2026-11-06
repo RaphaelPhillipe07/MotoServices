@@ -2,6 +2,7 @@ package br.com.motoservices.controller;
 
 import br.com.motoservices.bo.OrdemDeServicoBO;
 import br.com.motoservices.model.enums.StatusOS;
+import br.com.motoservices.vo.HistoricoStatusResponseVO;
 import br.com.motoservices.vo.OrdemDeServicoRequestVO;
 import br.com.motoservices.vo.OrdemDeServicoResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
@@ -40,7 +41,7 @@ class OrdemDeServicoControllerTest {
 
     private OrdemDeServicoResponseVO os(StatusOS status) {
         return new OrdemDeServicoResponseVO(1L, 1L, "Maria", 1L, "Honda", "CG", 160,
-                status, LocalDateTime.now(), null);
+                status, LocalDateTime.now(), null, null, null, null, null);
     }
 
     @Test
@@ -126,5 +127,20 @@ class OrdemDeServicoControllerTest {
         mockMvc.perform(post("/ordens-servico/1/confirmar"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("EM_ANDAMENTO"));
+    }
+
+    @Test
+    @DisplayName("histórico de status devolve envelope paginado")
+    void listarHistorico() throws Exception {
+        when(ordemDeServicoBO.listarHistorico(eq(1L), any(Pageable.class)))
+                .thenReturn(new PaginaResponseVO<>(
+                        List.of(new HistoricoStatusResponseVO(1L, 1L, null, StatusOS.ABERTA,
+                                LocalDateTime.now())),
+                        0, 20, 1, 1, true, true));
+
+        mockMvc.perform(get("/ordens-servico/1/historico"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].statusNovo").value("ABERTA"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 }

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -24,4 +25,10 @@ public class OrdemDeServicoResponseVO {
     private StatusOS status;
     private LocalDateTime dataAbertura;
     private LocalDateTime dataFechamento;
+
+    /** Preenchidos somente após o fechamento (snapshot imutável). */
+    private BigDecimal totalPecas;
+    private BigDecimal totalMaoDeObra;
+    private BigDecimal descontoAplicado;
+    private BigDecimal totalFinal;
 }

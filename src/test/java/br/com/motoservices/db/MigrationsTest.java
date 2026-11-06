@@ -58,7 +58,7 @@ class MigrationsTest {
                     .load()
                     .migrate();
 
-            assertEquals(2, resultado.migrationsExecuted, "V1 e V2 devem ser aplicadas");
+            assertEquals(5, resultado.migrationsExecuted, "V1 a V5 devem ser aplicadas");
 
             try (Connection conexao = dataSource.getConnection()) {
                 assertTrue(consultar(conexao,
@@ -76,6 +76,25 @@ class MigrationsTest {
                                 "SELECT extname FROM pg_extension WHERE extname = 'pg_trgm'")
                                 .contains("pg_trgm"),
                         "pg_trgm deve estar instalada");
+
+                Set<String> tabelasComVersao = consultar(conexao,
+                        "SELECT table_name FROM information_schema.columns "
+                                + "WHERE table_schema = 'motoservices' AND column_name = 'versao'");
+                assertTrue(tabelasComVersao.containsAll(Set.of("tb_peca", "tb_ordem_de_servico")),
+                        "V3 deve adicionar a coluna versao nas tabelas de peça e OS");
+
+                Set<String> colunasOs = consultar(conexao,
+                        "SELECT column_name FROM information_schema.columns "
+                                + "WHERE table_schema = 'motoservices' AND table_name = 'tb_ordem_de_servico'");
+                assertTrue(colunasOs.containsAll(Set.of(
+                                "total_pecas", "total_mao_de_obra", "desconto_aplicado", "total_final")),
+                        "V4 deve adicionar as colunas de snapshot do orçamento");
+
+                assertTrue(consultar(conexao,
+                                "SELECT table_name FROM information_schema.tables "
+                                        + "WHERE table_schema = 'motoservices'")
+                                .contains("tb_os_status_historico"),
+                        "V5 deve criar a tabela de histórico de status");
 
                 assertThrows(SQLException.class, () -> executar(conexao,
                                 "INSERT INTO motoservices.tb_peca "

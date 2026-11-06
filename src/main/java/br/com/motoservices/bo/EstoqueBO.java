@@ -103,8 +103,12 @@ public class EstoqueBO {
     @Transactional
     public void baixarEstoque(Long pecaId, int quantidade) {
         Peca peca = checarEstoque(pecaId, quantidade);
-        peca.setQuantidadeEstoque(peca.getQuantidadeEstoque() - quantidade);
-        pecaDAO.save(peca);
+        int linhasAfetadas = pecaDAO.baixarEstoque(pecaId, quantidade);
+        if (linhasAfetadas == 0) {
+            throw new EstoqueInsuficienteException(
+                    "Estoque insuficiente para a peça " + peca.getCodigo()
+                            + ": saldo alterado concorrentemente, solicitado " + quantidade + ".");
+        }
     }
 
     @Transactional(readOnly = true)

@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -39,6 +40,10 @@ public class Peca {
 
     @Column(name = "estoque_minimo", nullable = false)
     private Integer estoqueMinimo;
+
+    @Version
+    @Column(nullable = false)
+    private Long versao;
 
     public boolean isAbaixoDoMinimo() {
         return quantidadeEstoque != null && estoqueMinimo != null

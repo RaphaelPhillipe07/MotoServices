@@ -20,7 +20,7 @@ class PrecificacaoTest {
     }
 
     private static Peca pecaCom(String valor) {
-        return new Peca(1L, "P-001", "Pastilha de freio", new BigDecimal(valor), 10, 2);
+        return new Peca(1L, "P-001", "Pastilha de freio", new BigDecimal(valor), 10, 2, null);
     }
 
     @ParameterizedTest(name = "{0} cc → fator {1}")

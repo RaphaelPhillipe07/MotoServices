@@ -22,7 +22,11 @@ public final class OrdemDeServicoMapper {
                 os.getMoto() == null ? null : os.getMoto().getCilindradas(),
                 os.getStatus(),
                 os.getDataAbertura(),
-                os.getDataFechamento()
+                os.getDataFechamento(),
+                os.getTotalPecas(),
+                os.getTotalMaoDeObra(),
+                os.getDescontoAplicado(),
+                os.getTotalFinal()
         );
     }
 }

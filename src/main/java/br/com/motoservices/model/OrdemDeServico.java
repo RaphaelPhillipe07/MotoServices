@@ -15,11 +15,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +59,26 @@ public class OrdemDeServico {
 
     @Column(name = "data_fechamento")
     private LocalDateTime dataFechamento;
+
+    /**
+     * Snapshot imutável do orçamento no momento do fechamento.
+     * Nulo enquanto a OS não foi fechada.
+     */
+    @Column(name = "total_pecas", precision = 12, scale = 2)
+    private BigDecimal totalPecas;
+
+    @Column(name = "total_mao_de_obra", precision = 12, scale = 2)
+    private BigDecimal totalMaoDeObra;
+
+    @Column(name = "desconto_aplicado", precision = 12, scale = 2)
+    private BigDecimal descontoAplicado;
+
+    @Column(name = "total_final", precision = 12, scale = 2)
+    private BigDecimal totalFinal;
+
+    @Version
+    @Column(nullable = false)
+    private Long versao;
 
     public void adicionarServico(ServicoDaOficina servico) {
         Objects.requireNonNull(servico, "Serviço é obrigatório");

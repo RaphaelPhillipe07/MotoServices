@@ -1,6 +1,7 @@
 package br.com.motoservices.controller;
 
 import br.com.motoservices.bo.OrdemDeServicoBO;
+import br.com.motoservices.vo.HistoricoStatusResponseVO;
 import br.com.motoservices.vo.OrcamentoResponseVO;
 import br.com.motoservices.vo.OrdemDeServicoRequestVO;
 import br.com.motoservices.vo.OrdemDeServicoResponseVO;
@@ -71,6 +72,19 @@ public class OrdemDeServicoController {
             @PageableDefault(size = 20, sort = "dataAbertura", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ResponseEntity.ok(ordemDeServicoBO.listarPorCliente(clienteId, pageable));
+    }
+
+    @Operation(summary = "Histórico de status da OS",
+            description = "Transições registradas para a OS, das mais recentes para as mais antigas.")
+    @ApiResponse(responseCode = "404", description = "OS não encontrada",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemDetail.class)))
+    @GetMapping("/{osId}/historico")
+    public ResponseEntity<PaginaResponseVO<HistoricoStatusResponseVO>> listarHistorico(
+            @PathVariable Long osId,
+            @PageableDefault(size = 20, sort = "dataHora", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        return ResponseEntity.ok(ordemDeServicoBO.listarHistorico(osId, pageable));
     }
 
     @Operation(summary = "Adicionar serviço à OS",

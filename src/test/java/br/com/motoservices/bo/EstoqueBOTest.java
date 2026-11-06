@@ -39,7 +39,7 @@ class EstoqueBOTest {
     private EstoqueBO estoqueBO;
 
     private Peca peca(int quantidade) {
-        return new Peca(1L, "P-001", "Pastilha", new BigDecimal("80.00"), quantidade, 3);
+        return new Peca(1L, "P-001", "Pastilha", new BigDecimal("80.00"), quantidade, 3, null);
     }
 
     @Test
@@ -73,15 +73,25 @@ class EstoqueBOTest {
     }
 
     @Test
-    @DisplayName("baixa de estoque decrementa e persiste")
+    @DisplayName("baixa de estoque decrementa via UPDATE atômico")
     void baixaDeEstoque() {
         Peca peca = peca(5);
         when(pecaDAO.findById(1L)).thenReturn(Optional.of(peca));
+        when(pecaDAO.baixarEstoque(1L, 2)).thenReturn(1);
 
         estoqueBO.baixarEstoque(1L, 2);
 
-        assertEquals(3, peca.getQuantidadeEstoque());
-        verify(pecaDAO).save(peca);
+        verify(pecaDAO).baixarEstoque(1L, 2);
+        verify(pecaDAO, never()).save(peca);
+    }
+
+    @Test
+    @DisplayName("baixa concorrente sem saldo lança EstoqueInsuficienteException")
+    void baixaConcorrenteSemSaldo() {
+        when(pecaDAO.findById(1L)).thenReturn(Optional.of(peca(5)));
+        when(pecaDAO.baixarEstoque(1L, 2)).thenReturn(0);
+
+        assertThrows(EstoqueInsuficienteException.class, () -> estoqueBO.baixarEstoque(1L, 2));
     }
 
     @Test
