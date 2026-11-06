@@ -5,6 +5,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,6 +15,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "TB_CLIENTE", schema = "MOTOSERVICES")
@@ -41,4 +46,23 @@ public class Cliente {
 
     @Column(name = "proxima_revisao")
     private LocalDate proximaRevisao;
+
+    /**
+     * Motos do cliente. O vínculo é criado automaticamente na primeira OS
+     * (regra permissiva) e também pode ser gerenciado por endpoint próprio.
+     */
+    @ManyToMany
+    @JoinTable(
+            name = "TB_CLIENTE_MOTO",
+            schema = "MOTOSERVICES",
+            joinColumns = @JoinColumn(name = "cliente_id"),
+            inverseJoinColumns = @JoinColumn(name = "moto_id"))
+    private Set<Moto> motos = new HashSet<>();
+
+    public Set<Moto> getMotos() {
+        if (motos == null) {
+            motos = new HashSet<>();
+        }
+        return motos;
+    }
 }

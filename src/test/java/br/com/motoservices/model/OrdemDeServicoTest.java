@@ -20,7 +20,7 @@ class OrdemDeServicoTest {
     private OrdemDeServico osComStatus(StatusOS status) {
         OrdemDeServico os = new OrdemDeServico();
         os.setId(1L);
-        os.setCliente(new Cliente(1L, "Maria", "52998224725", "11999999999", null));
+        os.setCliente(new Cliente(1L, "Maria", "52998224725", "11999999999", null, null));
         os.setMoto(new Moto(1L, "Honda", "CG 160", 160));
         os.setStatus(status);
         os.setDataAbertura(LocalDateTime.now());

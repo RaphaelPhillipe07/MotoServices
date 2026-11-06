@@ -77,7 +77,7 @@ class OrdemDeServicoBOTest {
     // ---------- helpers ----------
 
     private Cliente cliente() {
-        return new Cliente(CLIENTE_ID, "Maria", "52998224725", "11999999999", null);
+        return new Cliente(CLIENTE_ID, "Maria", "52998224725", "11999999999", null, null);
     }
 
     private Moto moto(int cilindradas) {
@@ -229,6 +229,7 @@ class OrdemDeServicoBOTest {
         assertEquals(StatusOS.ABERTA, os.getStatus());
         assertNotNull(os.getDataAbertura());
         assertEquals(160, os.getMoto().getCilindradas());
+        verify(clienteBO).vincularMotoSeAusente(any(), any());
     }
 
     @Test

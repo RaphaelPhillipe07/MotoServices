@@ -31,6 +31,24 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: MotoServices
+    version: 0.4.0
+
 logging:
   level:
     root: info

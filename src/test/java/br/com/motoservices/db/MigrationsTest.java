@@ -58,7 +58,7 @@ class MigrationsTest {
                     .load()
                     .migrate();
 
-            assertEquals(5, resultado.migrationsExecuted, "V1 a V5 devem ser aplicadas");
+            assertEquals(6, resultado.migrationsExecuted, "V1 a V6 devem ser aplicadas");
 
             try (Connection conexao = dataSource.getConnection()) {
                 assertTrue(consultar(conexao,
@@ -95,6 +95,12 @@ class MigrationsTest {
                                         + "WHERE table_schema = 'motoservices'")
                                 .contains("tb_os_status_historico"),
                         "V5 deve criar a tabela de histórico de status");
+
+                assertTrue(consultar(conexao,
+                                "SELECT table_name FROM information_schema.tables "
+                                        + "WHERE table_schema = 'motoservices'")
+                                .contains("tb_cliente_moto"),
+                        "V6 deve criar a tabela de vínculo cliente-moto");
 
                 assertThrows(SQLException.class, () -> executar(conexao,
                                 "INSERT INTO motoservices.tb_peca "

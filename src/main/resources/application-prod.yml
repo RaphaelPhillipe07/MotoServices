@@ -19,6 +19,13 @@ springdoc:
   swagger-ui:
     enabled: false
 
+# Em produção expõe apenas o health (sem info/detalhes).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
 logging:
   level:
     root: warn

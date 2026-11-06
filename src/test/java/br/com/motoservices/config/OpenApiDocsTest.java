@@ -68,4 +68,14 @@ class OpenApiDocsTest {
                 () -> assertTrue(corpo.contains("MotoServices API"), "título da API")
         );
     }
+
+    @Test
+    @DisplayName("actuator health responde UP com banco disponível")
+    void healthUp() {
+        ResponseEntity<String> resposta = rest.getForEntity("/actuator/health", String.class);
+
+        assertEquals(HttpStatus.OK, resposta.getStatusCode());
+        assertNotNull(resposta.getBody());
+        assertTrue(resposta.getBody().contains("\"status\":\"UP\""));
+    }
 }

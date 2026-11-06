@@ -4,6 +4,7 @@ import br.com.motoservices.bo.ClienteBO;
 import br.com.motoservices.bo.MotoBO;
 import br.com.motoservices.vo.ClienteRequestVO;
 import br.com.motoservices.vo.ClienteResponseVO;
+import br.com.motoservices.vo.MotoResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -99,6 +101,37 @@ class ControllerValidationTest {
                 .andExpect(jsonPath("$.size").value(20))
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    @DisplayName("vincular moto ao cliente retorna 204")
+    void vincularMoto() throws Exception {
+        mockMvc.perform(post("/clientes/1/motos/2"))
+                .andExpect(status().isNoContent());
+
+        verify(clienteBO).vincularMoto(1L, 2L);
+    }
+
+    @Test
+    @DisplayName("desvincular moto do cliente retorna 204")
+    void desvincularMoto() throws Exception {
+        mockMvc.perform(delete("/clientes/1/motos/2"))
+                .andExpect(status().isNoContent());
+
+        verify(clienteBO).desvincularMoto(1L, 2L);
+    }
+
+    @Test
+    @DisplayName("listar motos do cliente devolve envelope")
+    void listarMotosDoCliente() throws Exception {
+        when(clienteBO.listarMotos(eq(1L), any(Pageable.class)))
+                .thenReturn(new PaginaResponseVO<>(
+                        List.of(new MotoResponseVO(2L, "Honda", "CG 160", 160)),
+                        0, 20, 1, 1, true, true));
+
+        mockMvc.perform(get("/clientes/1/motos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].modelo").value("CG 160"));
     }
 
     @Test

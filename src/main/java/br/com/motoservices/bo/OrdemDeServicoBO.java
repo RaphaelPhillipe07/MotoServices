@@ -53,6 +53,7 @@ public class OrdemDeServicoBO {
     public OrdemDeServico criarOS(Long clienteId, String marcaMoto, String modeloMoto) {
         Cliente cliente = clienteBO.encontrarCliente(clienteId);
         Moto moto = motoBO.encontrarMoto(marcaMoto, modeloMoto);
+        clienteBO.vincularMotoSeAusente(cliente, moto);
 
         OrdemDeServico os = new OrdemDeServico();
         os.setCliente(cliente);
@@ -267,7 +268,8 @@ public class OrdemDeServicoBO {
         historicoStatusOSDAO.save(historico);
     }
 
-    private static void validarServico(ServicoDaOficina servico) {        if (servico == null) {
+    private static void validarServico(ServicoDaOficina servico) {
+        if (servico == null) {
             throw new ValidacaoException("Serviço é obrigatório.");
         }
         if (servico.getDescricao() == null || servico.getDescricao().isBlank()) {

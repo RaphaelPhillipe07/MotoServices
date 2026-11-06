@@ -1,13 +1,18 @@
 package br.com.motoservices.bo;
 
 import br.com.motoservices.dao.ClienteDAO;
+import br.com.motoservices.dao.MotoDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
+import br.com.motoservices.exception.MotoInvalidaException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.mapper.ClienteMapper;
+import br.com.motoservices.mapper.MotoMapper;
 import br.com.motoservices.model.Cliente;
+import br.com.motoservices.model.Moto;
 import br.com.motoservices.util.Documento;
 import br.com.motoservices.vo.ClienteRequestVO;
 import br.com.motoservices.vo.ClienteResponseVO;
+import br.com.motoservices.vo.MotoResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -16,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +33,7 @@ public class ClienteBO {
     public static final int PERIODICIDADE_REVISAO_MESES = 6;
 
     private final ClienteDAO clienteDAO;
+    private final MotoDAO motoDAO;
 
     @Transactional(readOnly = true)
     public Cliente encontrarCliente(Long clienteId) {
@@ -100,6 +108,58 @@ public class ClienteBO {
     public LocalDate calcularProximaRevisao(LocalDate referencia) {
         LocalDate base = referencia == null ? LocalDate.now() : referencia;
         return base.plusMonths(PERIODICIDADE_REVISAO_MESES);
+    }
+
+    /**
+     * Vínculo permissivo: a primeira OS de um cliente com uma moto cria a relação
+     * automaticamente; chamadas seguintes são idempotentes.
+     */
+    @Transactional
+    public void vincularMotoSeAusente(Cliente cliente, Moto moto) {
+        boolean jaVinculada = cliente.getMotos().stream()
+                .anyMatch(m -> Objects.equals(m.getId(), moto.getId()));
+        if (!jaVinculada) {
+            cliente.getMotos().add(moto);
+            clienteDAO.save(cliente);
+        }
+    }
+
+    /**
+     * Vincula explicitamente uma moto ao cliente.
+     */
+    @Transactional
+    public void vincularMoto(Long clienteId, Long motoId) {
+        vincularMotoSeAusente(encontrarCliente(clienteId), encontrarMoto(motoId));
+    }
+
+    /**
+     * Remove o vínculo, se existir (idempotente).
+     */
+    @Transactional
+    public void desvincularMoto(Long clienteId, Long motoId) {
+        Cliente cliente = encontrarCliente(clienteId);
+        boolean removida = cliente.getMotos().removeIf(m -> Objects.equals(m.getId(), motoId));
+        if (removida) {
+            clienteDAO.save(cliente);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public PaginaResponseVO<MotoResponseVO> listarMotos(Long clienteId, Pageable pageable) {
+        List<MotoResponseVO> motos = encontrarCliente(clienteId).getMotos().stream()
+                .sorted(Comparator.comparing(Moto::getMarca, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(Moto::getModelo, String.CASE_INSENSITIVE_ORDER))
+                .map(MotoMapper::toResponse)
+                .toList();
+        return PaginaResponseVO.de(motos, pageable);
+    }
+
+    private Moto encontrarMoto(Long motoId) {
+        if (motoId == null) {
+            throw new ValidacaoException("ID da moto é obrigatório.");
+        }
+        return motoDAO.findById(motoId)
+                .orElseThrow(() -> new MotoInvalidaException("Moto não encontrada: " + motoId));
     }
 
     private static String exigirTexto(String valor, String campo) {

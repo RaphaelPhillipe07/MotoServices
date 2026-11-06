@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.function.Function;
@@ -41,5 +42,18 @@ public class PaginaResponseVO<T> {
 
     public static <T> PaginaResponseVO<T> de(List<T> itens, int page, int size) {
         return new PaginaResponseVO<>(itens, page, size, itens.size(), itens.isEmpty() ? 0 : 1, true, true);
+    }
+
+    /**
+     * Paginação em memória para coleções pequenas (ex.: motos de um cliente).
+     */
+    public static <T> PaginaResponseVO<T> de(List<T> todos, Pageable pageable) {
+        int page = pageable == null ? 0 : Math.max(pageable.getPageNumber(), 0);
+        int size = pageable == null || pageable.getPageSize() <= 0 ? 20 : pageable.getPageSize();
+        int from = Math.min(page * size, todos.size());
+        int to = Math.min(from + size, todos.size());
+        int totalPages = todos.isEmpty() ? 0 : (int) Math.ceil((double) todos.size() / size);
+        return new PaginaResponseVO<>(todos.subList(from, to), page, size, todos.size(),
+                totalPages, page == 0, to >= todos.size());
     }
 }
