@@ -4,7 +4,9 @@ import br.com.motoservices.dao.ClienteDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.Cliente;
-import br.com.motoservices.vo.ClienteVO;
+import br.com.motoservices.vo.ClienteRequestVO;
+import br.com.motoservices.vo.ClienteResponseVO;
+import br.com.motoservices.vo.PaginaResponseVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +14,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -37,8 +42,8 @@ class ClienteBOTest {
     @InjectMocks
     private ClienteBO clienteBO;
 
-    private ClienteVO vo(String nome, String documento) {
-        ClienteVO vo = new ClienteVO();
+    private ClienteRequestVO vo(String nome, String documento) {
+        ClienteRequestVO vo = new ClienteRequestVO();
         vo.setNome(nome);
         vo.setCpfCnpj(documento);
         vo.setContato("11999999999");
@@ -55,7 +60,7 @@ class ClienteBOTest {
             return cliente;
         });
 
-        ClienteVO salvo = clienteBO.cadastrar(vo("Maria Silva", "529.982.247-25"));
+        ClienteResponseVO salvo = clienteBO.cadastrar(vo("Maria Silva", "529.982.247-25"));
 
         assertEquals(10L, salvo.getId());
         assertEquals(CPF_VALIDO, salvo.getCpfCnpj());
@@ -68,7 +73,7 @@ class ClienteBOTest {
         when(clienteDAO.findByCpfCnpj(CNPJ_VALIDO)).thenReturn(Optional.empty());
         when(clienteDAO.save(any(Cliente.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ClienteVO salvo = clienteBO.cadastrar(vo("Oficina Central LTDA", CNPJ_VALIDO));
+        ClienteResponseVO salvo = clienteBO.cadastrar(vo("Oficina Central LTDA", CNPJ_VALIDO));
 
         ArgumentCaptor<Cliente> captor = ArgumentCaptor.forClass(Cliente.class);
         verify(clienteDAO).save(captor.capture());
@@ -107,20 +112,26 @@ class ClienteBOTest {
         when(clienteDAO.findByCpfCnpj(CPF_VALIDO))
                 .thenReturn(Optional.of(new Cliente(1L, "Maria", CPF_VALIDO, "119", null)));
 
-        List<ClienteVO> resultado = clienteBO.buscar("529.982.247-25");
+        PaginaResponseVO<ClienteResponseVO> resultado =
+                clienteBO.buscar("529.982.247-25", PageRequest.of(0, 20));
 
-        assertEquals(1, resultado.size());
-        assertEquals("Maria", resultado.get(0).getNome());
+        assertEquals(1, resultado.getContent().size());
+        assertEquals("Maria", resultado.getContent().get(0).getNome());
+        assertEquals(1, resultado.getTotalElements());
     }
 
     @Test
     @DisplayName("busca por nome quando o termo não é documento")
     void buscaPorNome() {
-        when(clienteDAO.findByNomeContainingIgnoreCase("maria"))
-                .thenReturn(List.of(new Cliente(1L, "Maria", CPF_VALIDO, "119", null)));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(clienteDAO.findByNomeContainingIgnoreCase("maria", pageable))
+                .thenReturn(new PageImpl<>(List.of(new Cliente(1L, "Maria", CPF_VALIDO, "119", null))));
 
-        assertEquals(1, clienteBO.buscar("  maria  ").size());
-        verify(clienteDAO).findByNomeContainingIgnoreCase("maria");
+        PaginaResponseVO<ClienteResponseVO> resultado = clienteBO.buscar("  maria  ", pageable);
+
+        assertEquals(1, resultado.getContent().size());
+        assertEquals(1, resultado.getTotalElements());
+        verify(clienteDAO).findByNomeContainingIgnoreCase("maria", pageable);
     }
 
     @Test

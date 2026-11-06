@@ -5,18 +5,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class PecaVO {
+public class MotoResponseVO {
 
     private Long id;
-    private String codigo;
-    private String descricao;
-    private BigDecimal valor;
-    private Integer quantidadeEstoque;
-    private Integer estoqueMinimo;
+    private String marca;
+    private String modelo;
+    private Integer cilindradas;
 }

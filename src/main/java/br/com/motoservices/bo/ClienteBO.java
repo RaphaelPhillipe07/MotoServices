@@ -3,10 +3,15 @@ package br.com.motoservices.bo;
 import br.com.motoservices.dao.ClienteDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
 import br.com.motoservices.exception.ValidacaoException;
+import br.com.motoservices.mapper.ClienteMapper;
 import br.com.motoservices.model.Cliente;
 import br.com.motoservices.util.Documento;
-import br.com.motoservices.vo.ClienteVO;
+import br.com.motoservices.vo.ClienteRequestVO;
+import br.com.motoservices.vo.ClienteResponseVO;
+import br.com.motoservices.vo.PaginaResponseVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,14 +37,19 @@ public class ClienteBO {
                         "Cliente não encontrado: " + clienteId));
     }
 
+    @Transactional(readOnly = true)
+    public ClienteResponseVO buscarPorId(Long clienteId) {
+        return ClienteMapper.toResponse(encontrarCliente(clienteId));
+    }
+
     @Transactional
-    public ClienteVO cadastrar(ClienteVO clienteVO) {
-        if (clienteVO == null) {
+    public ClienteResponseVO cadastrar(ClienteRequestVO request) {
+        if (request == null) {
             throw new ValidacaoException("Dados do cliente são obrigatórios.");
         }
-        String nome = exigirTexto(clienteVO.getNome(), "nome");
-        String contato = exigirTexto(clienteVO.getContato(), "contato");
-        String documento = Documento.normalizar(clienteVO.getCpfCnpj());
+        exigirTexto(request.getNome(), "nome");
+        exigirTexto(request.getContato(), "contato");
+        String documento = Documento.normalizar(request.getCpfCnpj());
         if (!Documento.isValido(documento)) {
             throw new ValidacaoException("CPF/CNPJ inválido.");
         }
@@ -47,29 +57,28 @@ public class ClienteBO {
             throw new ValidacaoException("Já existe cliente cadastrado com este CPF/CNPJ.");
         }
 
-        Cliente cliente = new Cliente();
-        cliente.setNome(nome);
-        cliente.setCpfCnpj(documento);
-        cliente.setContato(contato);
-        cliente.setProximaRevisao(clienteVO.getProximaRevisao());
-
-        return paraVO(clienteDAO.save(cliente));
+        return ClienteMapper.toResponse(clienteDAO.save(ClienteMapper.toEntity(request)));
     }
 
     @Transactional(readOnly = true)
-    public List<ClienteVO> buscar(String nomeOuCpf) {
+    public PaginaResponseVO<ClienteResponseVO> buscar(String nomeOuCpf, Pageable pageable) {
         String termo = exigirTexto(nomeOuCpf, "nomeOuCpf").trim();
         String documento = Documento.normalizar(termo);
 
-        List<Cliente> encontrados;
         if (!documento.isEmpty() && (documento.length() == 11 || documento.length() == 14)) {
-            encontrados = clienteDAO.findByCpfCnpj(documento)
+            List<ClienteResponseVO> encontrados = clienteDAO.findByCpfCnpj(documento)
                     .map(List::of)
-                    .orElseGet(List::of);
-        } else {
-            encontrados = clienteDAO.findByNomeContainingIgnoreCase(termo);
+                    .orElseGet(List::of)
+                    .stream()
+                    .map(ClienteMapper::toResponse)
+                    .toList();
+            return PaginaResponseVO.de(encontrados, 0, Math.max(encontrados.size(), 1));
         }
-        return encontrados.stream().map(ClienteBO::paraVO).toList();
+
+        Pageable paginacao = pageable == null ? PageRequest.of(0, 20) : pageable;
+        return PaginaResponseVO.de(
+                clienteDAO.findByNomeContainingIgnoreCase(termo, paginacao),
+                ClienteMapper::toResponse);
     }
 
     /**
@@ -98,10 +107,5 @@ public class ClienteBO {
             throw new ValidacaoException("O campo '" + campo + "' é obrigatório.");
         }
         return valor.trim();
-    }
-
-    static ClienteVO paraVO(Cliente cliente) {
-        return new ClienteVO(cliente.getId(), cliente.getNome(), cliente.getCpfCnpj(),
-                cliente.getContato(), cliente.getProximaRevisao());
     }
 }

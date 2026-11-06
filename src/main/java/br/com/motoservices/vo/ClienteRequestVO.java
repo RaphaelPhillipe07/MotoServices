@@ -10,13 +10,14 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
+/**
+ * Entrada de cadastro de cliente. Não aceita {@code id} nem campos gerenciados pelo servidor.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class ClienteVO {
-
-    private Long id;
+public class ClienteRequestVO {
 
     @NotBlank(message = "nome é obrigatório")
     @Size(max = 200, message = "nome deve ter no máximo 200 caracteres")

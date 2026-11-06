@@ -15,7 +15,12 @@ import br.com.motoservices.model.ServicoDaOficina;
 import br.com.motoservices.model.ServicoRevisao;
 import br.com.motoservices.model.ServicoTrocaPeca;
 import br.com.motoservices.model.enums.StatusOS;
-import br.com.motoservices.vo.OrcamentoVO;
+import br.com.motoservices.model.enums.TipoServico;
+import br.com.motoservices.vo.OrcamentoResponseVO;
+import br.com.motoservices.vo.OrdemDeServicoRequestVO;
+import br.com.motoservices.vo.OrdemDeServicoResponseVO;
+import br.com.motoservices.vo.PaginaResponseVO;
+import br.com.motoservices.vo.ServicoRequestVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,15 +29,20 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -118,7 +128,7 @@ class OrdemDeServicoBOTest {
         OrdemDeServico os = os(StatusOS.ABERTA, 300, pecasDaLoja(5, "100.00"));
         stubOS(os);
 
-        OrcamentoVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
+        OrcamentoResponseVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
 
         assertEquals(new BigDecimal("500.00"), orcamento.getTotalPecas());
         assertEquals(new BigDecimal("500.00"), orcamento.getTotalMaoDeObra());
@@ -132,7 +142,7 @@ class OrdemDeServicoBOTest {
         OrdemDeServico os = os(StatusOS.ABERTA, 300, pecasDaLoja(4, "100.00"));
         stubOS(os);
 
-        OrcamentoVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
+        OrcamentoResponseVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
 
         assertEquals(new BigDecimal("400.00"), orcamento.getTotalPecas());
         assertEquals(new BigDecimal("0.00"), orcamento.getDescontoAplicado());
@@ -146,7 +156,7 @@ class OrdemDeServicoBOTest {
         OrdemDeServico os = os(StatusOS.ABERTA, cilindradas, revisao("100.00"));
         stubOS(os);
 
-        OrcamentoVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
+        OrcamentoResponseVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
 
         assertEquals(new BigDecimal(maoDeObraEsperada), orcamento.getTotalMaoDeObra());
         assertEquals(new BigDecimal(maoDeObraEsperada), orcamento.getTotalFinal());
@@ -158,7 +168,7 @@ class OrdemDeServicoBOTest {
         OrdemDeServico os = os(StatusOS.ABERTA, 300, troca(1, "80.00", false));
         stubOS(os);
 
-        OrcamentoVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
+        OrcamentoResponseVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
 
         assertEquals(new BigDecimal("0.00"), orcamento.getTotalPecas());
         assertEquals(new BigDecimal("100.00"), orcamento.getTotalMaoDeObra());
@@ -166,7 +176,7 @@ class OrdemDeServicoBOTest {
     }
 
     @Test
-    @DisplayName("totais do OrcamentoVO são consistentes com as regras")
+    @DisplayName("totais do orçamento são consistentes com as regras")
     void testeTotaisDoOrcamentoVOEstaoCorretos() {
         ServicoDaOficina[] servicos = new ServicoDaOficina[]{
                 troca(1, "100.00", true), troca(2, "100.00", true), troca(3, "100.00", true),
@@ -177,7 +187,7 @@ class OrdemDeServicoBOTest {
         OrdemDeServico os = os(StatusOS.ABERTA, 500, servicos);
         stubOS(os);
 
-        OrcamentoVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
+        OrcamentoResponseVO orcamento = ordemDeServicoBO.calcularOrcamento(OS_ID);
 
         assertEquals(new BigDecimal("500.00"), orcamento.getTotalPecas());
         assertEquals(new BigDecimal("1200.00"), orcamento.getTotalMaoDeObra(),
@@ -199,7 +209,7 @@ class OrdemDeServicoBOTest {
                 () -> ordemDeServicoBO.calcularOrcamento(OS_ID));
     }
 
-    // ---------- criação ----------
+    // ---------- criação e consulta ----------
 
     @Test
     @DisplayName("cria OS com status ABERTA e data de abertura")
@@ -214,6 +224,41 @@ class OrdemDeServicoBOTest {
         assertEquals(StatusOS.ABERTA, os.getStatus());
         assertNotNull(os.getDataAbertura());
         assertEquals(160, os.getMoto().getCilindradas());
+    }
+
+    @Test
+    @DisplayName("cria OS a partir do contrato de entrada da API")
+    void testeCriarOSPorRequest() {
+        when(clienteBO.encontrarCliente(CLIENTE_ID)).thenReturn(cliente());
+        when(motoBO.encontrarMoto("Honda", "CG")).thenReturn(moto(160));
+        when(ordemDeServicoDAO.save(any(OrdemDeServico.class))).thenAnswer(invocation -> {
+            OrdemDeServico os = invocation.getArgument(0);
+            os.setId(OS_ID);
+            return os;
+        });
+
+        OrdemDeServicoResponseVO response = ordemDeServicoBO.criarOS(
+                new OrdemDeServicoRequestVO(CLIENTE_ID, "Honda", "CG"));
+
+        assertEquals(OS_ID, response.getId());
+        assertEquals(StatusOS.ABERTA, response.getStatus());
+        assertEquals("Honda", response.getMotoMarca());
+    }
+
+    @Test
+    @DisplayName("histórico por cliente devolve página de OS")
+    void testeListarPorCliente() {
+        when(clienteBO.encontrarCliente(CLIENTE_ID)).thenReturn(cliente());
+        Pageable pageable = PageRequest.of(0, 20);
+        when(ordemDeServicoDAO.findByClienteId(CLIENTE_ID, pageable))
+                .thenReturn(new PageImpl<>(List.of(os(StatusOS.ABERTA, 300))));
+
+        PaginaResponseVO<OrdemDeServicoResponseVO> pagina =
+                ordemDeServicoBO.listarPorCliente(CLIENTE_ID, pageable);
+
+        assertEquals(1, pagina.getContent().size());
+        assertEquals(CLIENTE_ID, pagina.getContent().get(0).getClienteId());
+        assertEquals(1, pagina.getTotalElements());
     }
 
     @Test
@@ -269,6 +314,48 @@ class OrdemDeServicoBOTest {
     }
 
     @Test
+    @DisplayName("adiciona revisão pelo contrato da API")
+    void testeAdicionarRevisaoPorRequest() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 300);
+        stubOS(os);
+
+        OrdemDeServicoResponseVO response = ordemDeServicoBO.adicionarServico(OS_ID,
+                new ServicoRequestVO(TipoServico.REVISAO, "Revisão 10.000 km", 30,
+                        new BigDecimal("100.00"), true, null, null));
+
+        assertEquals(1, os.getServicos().size());
+        assertEquals(OS_ID, response.getId());
+        verify(ordemDeServicoDAO).save(os);
+    }
+
+    @Test
+    @DisplayName("troca de peça da loja resolve a peça e valida o estoque")
+    void testeAdicionarTrocaPecaPorRequest() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 300);
+        stubOS(os);
+        Peca peca = new Peca(1L, "P-001", "Pastilha", new BigDecimal("80.00"), 5, 2);
+        when(estoqueBO.encontrarPeca(1L)).thenReturn(peca);
+
+        ordemDeServicoBO.adicionarServico(OS_ID,
+                new ServicoRequestVO(TipoServico.TROCA_PECA, "Troca de pastilha", null,
+                        new BigDecimal("100.00"), null, 1L, true));
+
+        assertTrue(os.getServicos().get(0) instanceof ServicoTrocaPeca);
+        verify(estoqueBO).checarEstoque(1L, 1);
+    }
+
+    @Test
+    @DisplayName("troca de peça da loja sem pecaId é rejeitada")
+    void testeTrocaPecaLojaSemPeca() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 300);
+        stubOS(os);
+
+        assertThrows(ValidacaoException.class, () -> ordemDeServicoBO.adicionarServico(OS_ID,
+                new ServicoRequestVO(TipoServico.TROCA_PECA, "Troca", null,
+                        new BigDecimal("100.00"), null, null, true)));
+    }
+
+    @Test
     @DisplayName("serviço com valor negativo é rejeitado")
     void testeServicoInvalido() {
         OrdemDeServico os = os(StatusOS.ABERTA, 300);
@@ -287,10 +374,10 @@ class OrdemDeServicoBOTest {
         OrdemDeServico os = os(StatusOS.ABERTA, 300, troca(1, "80.00", true), revisao("100.00"));
         stubOS(os);
 
-        Long id = ordemDeServicoBO.confirmarOS(OS_ID);
+        OrdemDeServicoResponseVO confirmada = ordemDeServicoBO.confirmarOS(OS_ID);
 
-        assertEquals(OS_ID, id);
-        assertEquals(StatusOS.EM_ANDAMENTO, os.getStatus());
+        assertEquals(OS_ID, confirmada.getId());
+        assertEquals(StatusOS.EM_ANDAMENTO, confirmada.getStatus());
         verify(estoqueBO).baixarEstoque(1L, 1);
 
         assertThrows(TransicaoStatusInvalidaException.class,
@@ -306,7 +393,7 @@ class OrdemDeServicoBOTest {
         LocalDate proxima = LocalDate.now().plusMonths(6);
         when(clienteBO.calcularProximaRevisao(any(LocalDate.class))).thenReturn(proxima);
 
-        OrcamentoVO orcamento = ordemDeServicoBO.fecharOS(OS_ID);
+        OrcamentoResponseVO orcamento = ordemDeServicoBO.fecharOS(OS_ID);
 
         assertEquals(StatusOS.FECHADA, os.getStatus());
         assertNotNull(os.getDataFechamento());

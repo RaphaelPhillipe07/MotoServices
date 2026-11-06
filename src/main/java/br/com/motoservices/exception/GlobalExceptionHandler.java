@@ -1,10 +1,11 @@
 package br.com.motoservices.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -16,142 +17,179 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Contrato de erro da API. O formato interim é {@code {"erro": "...", "campos": {...}}};
- * a migração para RFC 9457 (ProblemDetail) acontece na Fase 2.
+ * Contrato de erro da API em RFC 9457 ({@code application/problem+json}).
+ *
+ * <p>Além dos campos padrão ({@code type}, {@code title}, {@code status}, {@code detail},
+ * {@code instance}), erros de validação trazem {@code errors: [{field, message}]},
+ * que a UI usa para destacar o input correspondente.</p>
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String BASE_TYPE = "urn:motoservices:problem:";
+
     // ---------- erros de domínio ----------
 
     @ExceptionHandler(MotoInvalidaException.class)
-    public ResponseEntity<Map<String, Object>> handleMotoInvalida(MotoInvalidaException ex) {
-        return erro(HttpStatus.NOT_FOUND, ex);
+    public ProblemDetail handleMotoInvalida(MotoInvalidaException ex, HttpServletRequest request) {
+        return naoEncontrado(ex, request);
     }
 
     @ExceptionHandler(ClienteNaoEncontradoException.class)
-    public ResponseEntity<Map<String, Object>> handleClienteNaoEncontrado(ClienteNaoEncontradoException ex) {
-        return erro(HttpStatus.NOT_FOUND, ex);
+    public ProblemDetail handleClienteNaoEncontrado(ClienteNaoEncontradoException ex, HttpServletRequest request) {
+        return naoEncontrado(ex, request);
     }
 
     @ExceptionHandler(PecaNaoEncontradaException.class)
-    public ResponseEntity<Map<String, Object>> handlePecaNaoEncontrada(PecaNaoEncontradaException ex) {
-        return erro(HttpStatus.NOT_FOUND, ex);
+    public ProblemDetail handlePecaNaoEncontrada(PecaNaoEncontradaException ex, HttpServletRequest request) {
+        return naoEncontrado(ex, request);
     }
 
     @ExceptionHandler(OrdemDeServicoNaoEncontradaException.class)
-    public ResponseEntity<Map<String, Object>> handleOsNaoEncontrada(OrdemDeServicoNaoEncontradaException ex) {
-        return erro(HttpStatus.NOT_FOUND, ex);
+    public ProblemDetail handleOsNaoEncontrada(OrdemDeServicoNaoEncontradaException ex, HttpServletRequest request) {
+        return naoEncontrado(ex, request);
     }
 
     @ExceptionHandler(EstoqueInsuficienteException.class)
-    public ResponseEntity<Map<String, Object>> handleEstoqueInsuficiente(EstoqueInsuficienteException ex) {
-        return erro(HttpStatus.CONFLICT, ex);
+    public ProblemDetail handleEstoqueInsuficiente(EstoqueInsuficienteException ex, HttpServletRequest request) {
+        return conflito(ex, request);
     }
 
     @ExceptionHandler(TransicaoStatusInvalidaException.class)
-    public ResponseEntity<Map<String, Object>> handleTransicaoInvalida(TransicaoStatusInvalidaException ex) {
-        return erro(HttpStatus.CONFLICT, ex);
+    public ProblemDetail handleTransicaoInvalida(TransicaoStatusInvalidaException ex, HttpServletRequest request) {
+        return conflito(ex, request);
     }
 
     @ExceptionHandler(ValidacaoException.class)
-    public ResponseEntity<Map<String, Object>> handleValidacao(ValidacaoException ex) {
-        return erro(HttpStatus.BAD_REQUEST, ex);
+    public ProblemDetail handleValidacao(ValidacaoException ex, HttpServletRequest request) {
+        return problema(HttpStatus.BAD_REQUEST, "validacao", "Dados inválidos", ex.getMessage(), request);
     }
 
     // ---------- validação de entrada ----------
 
-    /**
-     * Bean Validation em {@code @RequestBody}: devolve o mapa de campos inválidos,
-     * que a UI usa para destacar o input correspondente.
-     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleCamposInvalidos(MethodArgumentNotValidException ex) {
-        Map<String, String> campos = new LinkedHashMap<>();
+    public ProblemDetail handleCamposInvalidos(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        ProblemDetail problema = problema(HttpStatus.BAD_REQUEST, "validacao", "Dados inválidos",
+                "Um ou mais campos estão inválidos.", request);
+
+        List<Map<String, String>> erros = new ArrayList<>();
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
-            campos.merge(fieldError.getField(), mensagemOuPadrao(fieldError), (atual, novo) -> atual + "; " + novo);
+            Map<String, String> erro = new LinkedHashMap<>();
+            erro.put("field", fieldError.getField());
+            erro.put("message", fieldError.getDefaultMessage() == null
+                    ? "valor inválido" : fieldError.getDefaultMessage());
+            erros.add(erro);
         }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("erro", "Dados inválidos.");
-        body.put("campos", campos);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+        problema.setProperty("errors", erros);
+        return problema;
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException ex) {
-        Map<String, String> campos = new LinkedHashMap<>();
-        ex.getConstraintViolations().forEach(violacao ->
-                campos.put(violacao.getPropertyPath().toString(), violacao.getMessage()));
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("erro", "Dados inválidos.");
-        body.put("campos", campos);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    public ProblemDetail handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
+        ProblemDetail problema = problema(HttpStatus.BAD_REQUEST, "validacao", "Dados inválidos",
+                "Um ou mais parâmetros estão inválidos.", request);
+
+        List<Map<String, String>> erros = new ArrayList<>();
+        ex.getConstraintViolations().forEach(violacao -> {
+            Map<String, String> erro = new LinkedHashMap<>();
+            erro.put("field", violacao.getPropertyPath().toString());
+            erro.put("message", violacao.getMessage());
+            erros.add(erro);
+        });
+        problema.setProperty("errors", erros);
+        return problema;
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Map<String, Object>> handleJsonInvalido(HttpMessageNotReadableException ex) {
-        return corpo(HttpStatus.BAD_REQUEST, "Corpo da requisição inválido ou malformado.");
+    public ProblemDetail handleJsonInvalido(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return problema(HttpStatus.BAD_REQUEST, "requisicao-invalida", "Requisição inválida",
+                "Corpo da requisição inválido ou malformado.", request);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<Map<String, Object>> handleParametroAusente(MissingServletRequestParameterException ex) {
-        return corpo(HttpStatus.BAD_REQUEST, "Parâmetro obrigatório ausente: " + ex.getParameterName() + ".");
+    public ProblemDetail handleParametroAusente(MissingServletRequestParameterException ex,
+                                                HttpServletRequest request) {
+        return problema(HttpStatus.BAD_REQUEST, "requisicao-invalida", "Requisição inválida",
+                "Parâmetro obrigatório ausente: " + ex.getParameterName() + ".", request);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<Map<String, Object>> handleParametroInvalido(MethodArgumentTypeMismatchException ex) {
-        return corpo(HttpStatus.BAD_REQUEST, "Parâmetro inválido: " + ex.getName() + ".");
+    public ProblemDetail handleParametroInvalido(MethodArgumentTypeMismatchException ex,
+                                                 HttpServletRequest request) {
+        return problema(HttpStatus.BAD_REQUEST, "requisicao-invalida", "Requisição inválida",
+                "Parâmetro inválido: " + ex.getName() + ".", request);
     }
 
-    // ---------- erros de persistência e protocolo ----------
+    // ---------- persistência e protocolo ----------
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, Object>> handleIntegridade(DataIntegrityViolationException ex) {
+    public ProblemDetail handleIntegridade(DataIntegrityViolationException ex, HttpServletRequest request) {
         log.warn("Violação de integridade de dados: {}", ex.getMostSpecificCause().getMessage());
-        return corpo(HttpStatus.CONFLICT, "Operação viola uma restrição de integridade dos dados.");
+        return problema(HttpStatus.CONFLICT, "conflito", "Conflito de estado",
+                "Operação viola uma restrição de integridade dos dados.", request);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleRecursoInexistente(NoResourceFoundException ex) {
-        return corpo(HttpStatus.NOT_FOUND, "Recurso não encontrado.");
+    public ProblemDetail handleRecursoInexistente(NoResourceFoundException ex, HttpServletRequest request) {
+        return problema(HttpStatus.NOT_FOUND, "nao-encontrado", "Recurso não encontrado",
+                "Recurso não encontrado.", request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<Map<String, Object>> handleMetodoNaoSuportado(HttpRequestMethodNotSupportedException ex) {
-        return corpo(HttpStatus.METHOD_NOT_ALLOWED, "Método HTTP não suportado para este recurso.");
+    public ProblemDetail handleMetodoNaoSuportado(HttpRequestMethodNotSupportedException ex,
+                                                  HttpServletRequest request) {
+        return problema(HttpStatus.METHOD_NOT_ALLOWED, "metodo-nao-suportado", "Método não suportado",
+                "Método HTTP não suportado para este recurso.", request);
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-    public ResponseEntity<Map<String, Object>> handleMediaTypeNaoSuportado(HttpMediaTypeNotSupportedException ex) {
-        return corpo(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Content-Type não suportado.");
+    public ProblemDetail handleMediaTypeNaoSuportado(HttpMediaTypeNotSupportedException ex,
+                                                     HttpServletRequest request) {
+        return problema(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "midia-nao-suportada", "Mídia não suportada",
+                "Content-Type não suportado.", request);
     }
 
     // ---------- fallback ----------
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleInesperado(Exception ex) {
+    public ProblemDetail handleInesperado(Exception ex, HttpServletRequest request) {
         log.error("Erro não tratado", ex);
-        return corpo(HttpStatus.INTERNAL_SERVER_ERROR, "Erro interno inesperado.");
+        return problema(HttpStatus.INTERNAL_SERVER_ERROR, "erro-interno", "Erro interno",
+                "Erro interno inesperado.", request);
     }
 
-    private static ResponseEntity<Map<String, Object>> erro(HttpStatus status, RuntimeException ex) {
-        return corpo(status, ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+    // ---------- helpers ----------
+
+    private static ProblemDetail naoEncontrado(RuntimeException ex, HttpServletRequest request) {
+        return problema(HttpStatus.NOT_FOUND, "nao-encontrado", "Recurso não encontrado",
+                mensagem(ex), request);
     }
 
-    private static ResponseEntity<Map<String, Object>> corpo(HttpStatus status, String mensagem) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("erro", mensagem);
-        return ResponseEntity.status(status).body(body);
+    private static ProblemDetail conflito(RuntimeException ex, HttpServletRequest request) {
+        return problema(HttpStatus.CONFLICT, "conflito", "Conflito de estado",
+                mensagem(ex), request);
     }
 
-    private static String mensagemOuPadrao(FieldError fieldError) {
-        return fieldError.getDefaultMessage() == null
-                ? "valor inválido"
-                : fieldError.getDefaultMessage();
+    private static ProblemDetail problema(HttpStatus status, String slug, String titulo,
+                                          String detalhe, HttpServletRequest request) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(status, detalhe);
+        problema.setType(URI.create(BASE_TYPE + slug));
+        problema.setTitle(titulo);
+        if (request != null) {
+            problema.setInstance(URI.create(request.getRequestURI()));
+        }
+        return problema;
+    }
+
+    private static String mensagem(RuntimeException ex) {
+        return ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
     }
 }

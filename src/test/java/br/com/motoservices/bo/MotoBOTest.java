@@ -4,13 +4,18 @@ import br.com.motoservices.dao.MotoDAO;
 import br.com.motoservices.exception.MotoInvalidaException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.Moto;
-import br.com.motoservices.vo.MotoVO;
+import br.com.motoservices.vo.MotoRequestVO;
+import br.com.motoservices.vo.MotoResponseVO;
+import br.com.motoservices.vo.PaginaResponseVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -53,14 +58,14 @@ class MotoBOTest {
     @Test
     @DisplayName("cadastro exige cilindradas positivas")
     void cadastroSemCilindradas() {
-        MotoVO vo = new MotoVO(null, "Honda", "Biz", 0);
+        MotoRequestVO vo = new MotoRequestVO("Honda", "Biz", 0);
         assertThrows(ValidacaoException.class, () -> motoBO.cadastrar(vo));
     }
 
     @Test
     @DisplayName("não permite duplicar marca/modelo no catálogo")
     void cadastroDuplicado() {
-        MotoVO vo = new MotoVO(null, "Honda", "CG 160", 160);
+        MotoRequestVO vo = new MotoRequestVO("Honda", "CG 160", 160);
         when(motoDAO.findByMarcaIgnoreCaseAndModeloIgnoreCase("Honda", "CG 160"))
                 .thenReturn(Optional.of(new Moto(1L, "Honda", "CG 160", 160)));
 
@@ -71,7 +76,7 @@ class MotoBOTest {
     @Test
     @DisplayName("cadastro válido devolve VO com id")
     void cadastroValido() {
-        MotoVO vo = new MotoVO(null, "Honda", "CG 160", 160);
+        MotoRequestVO vo = new MotoRequestVO("Honda", "CG 160", 160);
         when(motoDAO.findByMarcaIgnoreCaseAndModeloIgnoreCase("Honda", "CG 160"))
                 .thenReturn(Optional.empty());
         when(motoDAO.save(any(Moto.class))).thenAnswer(invocation -> {
@@ -80,7 +85,7 @@ class MotoBOTest {
             return moto;
         });
 
-        MotoVO salvo = motoBO.cadastrar(vo);
+        MotoResponseVO salvo = motoBO.cadastrar(vo);
 
         assertEquals(7L, salvo.getId());
         assertEquals(160, salvo.getCilindradas());
@@ -89,19 +94,22 @@ class MotoBOTest {
     @Test
     @DisplayName("filtro rejeita faixa invertida")
     void filtroInvertido() {
-        assertThrows(ValidacaoException.class, () -> motoBO.filtrarPorCilindradas(500, 100));
-        verify(motoDAO, never()).findByCilindradasBetween(500, 100);
+        Pageable pageable = PageRequest.of(0, 20);
+        assertThrows(ValidacaoException.class, () -> motoBO.filtrarPorCilindradas(500, 100, pageable));
+        verify(motoDAO, never()).findByCilindradasBetween(500, 100, pageable);
     }
 
     @Test
     @DisplayName("filtro devolve VOs mapeados")
     void filtroValido() {
-        when(motoDAO.findByCilindradasBetween(150, 300))
-                .thenReturn(List.of(new Moto(1L, "Honda", "CG 160", 160)));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(motoDAO.findByCilindradasBetween(150, 300, pageable))
+                .thenReturn(new PageImpl<>(List.of(new Moto(1L, "Honda", "CG 160", 160))));
 
-        List<MotoVO> resultado = motoBO.filtrarPorCilindradas(150, 300);
+        PaginaResponseVO<MotoResponseVO> resultado =
+                motoBO.filtrarPorCilindradas(150, 300, pageable);
 
-        assertEquals(1, resultado.size());
-        assertEquals("CG 160", resultado.get(0).getModelo());
+        assertEquals(1, resultado.getContent().size());
+        assertEquals("CG 160", resultado.getContent().get(0).getModelo());
     }
 }

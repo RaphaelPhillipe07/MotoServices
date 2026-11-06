@@ -12,6 +12,7 @@ HELP.md
 *.iml
 *.iws
 *.ipr
+.reasonix
 
 # IDE - Eclipse / VSCode
 .classpath

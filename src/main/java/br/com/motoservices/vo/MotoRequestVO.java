@@ -9,13 +9,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+/**
+ * Entrada de cadastro de moto no catálogo.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class MotoVO {
-
-    private Long id;
+public class MotoRequestVO {
 
     @NotBlank(message = "marca é obrigatória")
     @Size(max = 100, message = "marca deve ter no máximo 100 caracteres")

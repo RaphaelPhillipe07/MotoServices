@@ -11,13 +11,12 @@ import java.math.BigDecimal;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class OrcamentoVO {
+public class PecaResponseVO {
 
-    private BigDecimal totalPecas;
-
-    private BigDecimal totalMaoDeObra;
-
-    private BigDecimal descontoAplicado;
-
-    private BigDecimal totalFinal;
+    private Long id;
+    private String codigo;
+    private String descricao;
+    private BigDecimal valor;
+    private Integer quantidadeEstoque;
+    private Integer estoqueMinimo;
 }
