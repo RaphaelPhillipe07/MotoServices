@@ -2,6 +2,7 @@ package br.com.motoservices.bo;
 
 import br.com.motoservices.dao.MotoDAO;
 import br.com.motoservices.exception.MotoInvalidaException;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.Moto;
 import br.com.motoservices.vo.MotoRequestVO;
@@ -69,7 +70,7 @@ class MotoBOTest {
         when(motoDAO.findByMarcaIgnoreCaseAndModeloIgnoreCase("Honda", "CG 160"))
                 .thenReturn(Optional.of(new Moto(1L, "Honda", "CG 160", 160)));
 
-        assertThrows(ValidacaoException.class, () -> motoBO.cadastrar(vo));
+        assertThrows(ConflitoException.class, () -> motoBO.cadastrar(vo));
         verify(motoDAO, never()).save(any());
     }
 

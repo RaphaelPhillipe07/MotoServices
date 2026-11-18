@@ -38,4 +38,13 @@ public interface PecaDAO extends JpaRepository<Peca, Long> {
             + "p.versao = p.versao + 1 "
             + "WHERE p.id = :pecaId AND p.quantidadeEstoque >= :quantidade")
     int baixarEstoque(@Param("pecaId") Long pecaId, @Param("quantidade") int quantidade);
+
+    /**
+     * Estorno atômico usado ao cancelar/remover serviços já confirmados.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Peca p SET p.quantidadeEstoque = p.quantidadeEstoque + :quantidade, "
+            + "p.versao = p.versao + 1 "
+            + "WHERE p.id = :pecaId")
+    int devolverEstoque(@Param("pecaId") Long pecaId, @Param("quantidade") int quantidade);
 }

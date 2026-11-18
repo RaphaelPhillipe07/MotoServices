@@ -2,7 +2,9 @@ package br.com.motoservices.bo;
 
 import br.com.motoservices.dao.HistoricoStatusOSDAO;
 import br.com.motoservices.dao.OrdemDeServicoDAO;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.OrdemDeServicoNaoEncontradaException;
+import br.com.motoservices.exception.ServicoNaoEncontradoException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.mapper.HistoricoStatusMapper;
 import br.com.motoservices.mapper.OrdemDeServicoMapper;
@@ -15,15 +17,18 @@ import br.com.motoservices.model.Precificacao;
 import br.com.motoservices.model.ServicoDaOficina;
 import br.com.motoservices.model.ServicoRevisao;
 import br.com.motoservices.model.ServicoTrocaPeca;
+import br.com.motoservices.model.enums.FormaPagamento;
 import br.com.motoservices.model.enums.StatusOS;
 import br.com.motoservices.model.enums.TipoServico;
+import br.com.motoservices.vo.HistoricoStatusResponseVO;
 import br.com.motoservices.vo.OrcamentoResponseVO;
 import br.com.motoservices.vo.OrdemDeServicoRequestVO;
 import br.com.motoservices.vo.OrdemDeServicoResponseVO;
-import br.com.motoservices.vo.HistoricoStatusResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import br.com.motoservices.vo.ServicoRequestVO;
+import br.com.motoservices.util.ComprovanteRenderer;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -33,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -81,13 +87,27 @@ public class OrdemDeServicoBO {
 
     @Transactional(readOnly = true)
     public PaginaResponseVO<OrdemDeServicoResponseVO> listarPorCliente(Long clienteId, Pageable pageable) {
-        clienteBO.encontrarCliente(clienteId);
+        return listar(clienteId, null, null, pageable);
+    }
+
+    /**
+     * Lista OS com filtros opcionais e combináveis por cliente, moto e status.
+     */
+    @Transactional(readOnly = true)
+    public PaginaResponseVO<OrdemDeServicoResponseVO> listar(Long clienteId, Long motoId, StatusOS status,
+                                                             Pageable pageable) {
+        if (clienteId != null) {
+            clienteBO.encontrarCliente(clienteId);
+        }
+        if (motoId != null) {
+            motoBO.encontrarMotoPorId(motoId);
+        }
         Pageable paginacao = pageable == null
                 ? PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "dataAbertura"))
                 : pageable;
-        return PaginaResponseVO.de(
-                ordemDeServicoDAO.findByClienteId(clienteId, paginacao),
-                OrdemDeServicoMapper::toResponse);
+
+        Page<OrdemDeServico> pagina = ordemDeServicoDAO.buscarComFiltros(clienteId, motoId, status, paginacao);
+        return PaginaResponseVO.de(pagina, OrdemDeServicoMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -123,17 +143,56 @@ public class OrdemDeServicoBO {
         return OrdemDeServicoMapper.toResponse(os);
     }
 
-    private void adicionarServico(OrdemDeServico os, ServicoDaOficina servico) {
-        validarServico(servico);
+    /**
+     * Atualiza um serviço existente. O tipo (REVISAO/TROCA_PECA) não pode ser alterado.
+     * Se a OS já foi confirmada, o estoque é ajustado (estorna o antigo e baixa o novo).
+     */
+    @Transactional
+    public OrdemDeServicoResponseVO atualizarServico(Long osId, Long servicoId, ServicoRequestVO request) {
+        OrdemDeServico os = encontrarOS(osId);
+        if (!os.getStatus().permiteAdicionarServico()) {
+            throw new ConflitoException("Não é possível alterar serviços de uma OS " + os.getStatus() + ".");
+        }
+        ServicoDaOficina existente = encontrarServico(os, servicoId);
+        ServicoDaOficina dados = montarServico(request);
 
-        if (servico instanceof ServicoTrocaPeca troca && troca.usaPecaDaLoja()) {
-            if (troca.getPecaEnvolvida() == null || troca.getPecaEnvolvida().getId() == null) {
-                throw new ValidacaoException(
-                        "Troca de peça fornecida pela loja exige uma peça cadastrada.");
-            }
-            estoqueBO.checarEstoque(troca.getPecaEnvolvida().getId(), QUANTIDADE_POR_SERVICO);
+        if (!mesmoTipo(existente, dados)) {
+            throw new ConflitoException("Não é possível alterar o tipo de um serviço existente.");
         }
 
+        if (os.getStatus().estoqueBaixado()) {
+            devolverEstoqueDaLoja(existente);
+            baixarEstoqueDaLoja(dados);
+        } else {
+            checarEstoqueDaLoja(dados);
+        }
+
+        aplicarDados(existente, dados);
+        ordemDeServicoDAO.save(os);
+        return OrdemDeServicoMapper.toResponse(os);
+    }
+
+    /**
+     * Remove um serviço. Se a OS já foi confirmada, devolve ao estoque a peça da loja.
+     */
+    @Transactional
+    public OrdemDeServicoResponseVO removerServico(Long osId, Long servicoId) {
+        OrdemDeServico os = encontrarOS(osId);
+        if (!os.getStatus().permiteAdicionarServico()) {
+            throw new ConflitoException("Não é possível remover serviços de uma OS " + os.getStatus() + ".");
+        }
+        ServicoDaOficina servico = encontrarServico(os, servicoId);
+        if (os.getStatus().estoqueBaixado()) {
+            devolverEstoqueDaLoja(servico);
+        }
+        os.removerServico(servico);
+        ordemDeServicoDAO.save(os);
+        return OrdemDeServicoMapper.toResponse(os);
+    }
+
+    private void adicionarServico(OrdemDeServico os, ServicoDaOficina servico) {
+        validarServico(servico);
+        checarEstoqueDaLoja(servico);
         os.adicionarServico(servico);
         ordemDeServicoDAO.save(os);
     }
@@ -168,7 +227,85 @@ public class OrdemDeServicoBO {
         return servico;
     }
 
-    // ---------- orçamento, confirmação e fechamento ----------
+    private static boolean mesmoTipo(ServicoDaOficina existente, ServicoDaOficina dados) {
+        return (existente instanceof ServicoTrocaPeca) == (dados instanceof ServicoTrocaPeca);
+    }
+
+    private static void aplicarDados(ServicoDaOficina destino, ServicoDaOficina dados) {
+        destino.setDescricao(dados.getDescricao());
+        destino.setTempoEstimado(dados.getTempoEstimado());
+        destino.setValorBaseMaoDeObra(dados.getValorBaseMaoDeObra());
+        if (destino instanceof ServicoRevisao revisao && dados instanceof ServicoRevisao revisaoDados) {
+            revisao.setChecklistGeral(revisaoDados.getChecklistGeral());
+        }
+        if (destino instanceof ServicoTrocaPeca troca && dados instanceof ServicoTrocaPeca trocaDados) {
+            troca.setPecaEnvolvida(trocaDados.getPecaEnvolvida());
+            troca.setPecaFornecidaPelaLoja(trocaDados.getPecaFornecidaPelaLoja());
+        }
+    }
+
+    private void checarEstoqueDaLoja(ServicoDaOficina servico) {
+        if (usaPecaDaLoja(servico)) {
+            estoqueBO.checarEstoque(pecaId(servico), QUANTIDADE_POR_SERVICO);
+        }
+    }
+
+    private void baixarEstoqueDaLoja(ServicoDaOficina servico) {
+        if (usaPecaDaLoja(servico)) {
+            estoqueBO.baixarEstoque(pecaId(servico), QUANTIDADE_POR_SERVICO);
+        }
+    }
+
+    private void devolverEstoqueDaLoja(ServicoDaOficina servico) {
+        if (usaPecaDaLoja(servico)) {
+            estoqueBO.devolverEstoque(pecaId(servico), QUANTIDADE_POR_SERVICO);
+        }
+    }
+
+    private static boolean usaPecaDaLoja(ServicoDaOficina servico) {
+        return servico instanceof ServicoTrocaPeca troca && troca.usaPecaDaLoja();
+    }
+
+    private static Long pecaId(ServicoDaOficina servico) {
+        ServicoTrocaPeca troca = (ServicoTrocaPeca) servico;
+        if (troca.getPecaEnvolvida() == null || troca.getPecaEnvolvida().getId() == null) {
+            throw new ValidacaoException("Troca de peça fornecida pela loja exige uma peça cadastrada.");
+        }
+        return troca.getPecaEnvolvida().getId();
+    }
+
+    private ServicoDaOficina encontrarServico(OrdemDeServico os, Long servicoId) {
+        if (servicoId == null) {
+            throw new ValidacaoException("ID do serviço é obrigatório.");
+        }
+        return os.getServicos().stream()
+                .filter(servico -> Objects.equals(servico.getId(), servicoId))
+                .findFirst()
+                .orElseThrow(() -> new ServicoNaoEncontradoException(
+                        "Serviço não encontrado na OS " + os.getId() + ": " + servicoId));
+    }
+
+    // ---------- status, orçamento, confirmação, cancelamento e fechamento ----------
+
+    /**
+     * Move a OS entre os status operacionais. FECHADA e CANCELADA exigem os endpoints específicos.
+     */
+    @Transactional
+    public OrdemDeServicoResponseVO alterarStatus(Long osId, StatusOS destino) {
+        if (destino == null) {
+            throw new ValidacaoException("Novo status é obrigatório.");
+        }
+        if (destino == StatusOS.FECHADA || destino == StatusOS.CANCELADA) {
+            throw new ConflitoException(
+                    "Use /fechar ou /cancelar para encerrar a ordem de serviço.");
+        }
+        OrdemDeServico os = encontrarOS(osId);
+        StatusOS statusAnterior = os.getStatus();
+        os.alterarStatus(destino);
+        ordemDeServicoDAO.save(os);
+        registrarHistorico(os, statusAnterior, destino);
+        return OrdemDeServicoMapper.toResponse(os);
+    }
 
     @Transactional(readOnly = true)
     public OrcamentoResponseVO calcularOrcamento(Long osId) {
@@ -177,38 +314,73 @@ public class OrdemDeServicoBO {
 
     /**
      * Confirma o orçamento: inicia o serviço e baixa o estoque das peças da loja.
-     * A máquina de estados impede confirmação dupla (e baixa dupla).
+     * A máquina de estados impede confirmação dupla (e baixa dupla). Uma OS sem
+     * serviços não pode ser confirmada.
      */
     @Transactional
     public OrdemDeServicoResponseVO confirmarOS(Long osId) {
         OrdemDeServico os = encontrarOS(osId);
+        if (os.getServicos().isEmpty()) {
+            throw new ConflitoException("Não é possível confirmar uma OS sem serviços.");
+        }
         StatusOS statusAnterior = os.getStatus();
         os.alterarStatus(StatusOS.EM_ANDAMENTO);
-
         for (ServicoDaOficina servico : os.getServicos()) {
-            if (servico instanceof ServicoTrocaPeca troca && troca.usaPecaDaLoja()) {
-                estoqueBO.baixarEstoque(troca.getPecaEnvolvida().getId(), QUANTIDADE_POR_SERVICO);
-            }
+            baixarEstoqueDaLoja(servico);
         }
-
         ordemDeServicoDAO.save(os);
         registrarHistorico(os, statusAnterior, StatusOS.EM_ANDAMENTO);
         return OrdemDeServicoMapper.toResponse(os);
     }
 
     /**
-     * Fecha a OS, registra a data de fechamento e agenda a próxima revisão do cliente.
+     * Cancela a OS até AGUARDANDO_CLIENTE. Se o estoque já foi baixado na confirmação,
+     * as peças da loja são devolvidas automaticamente.
+     */
+    @Transactional
+    public OrdemDeServicoResponseVO cancelarOS(Long osId) {
+        OrdemDeServico os = encontrarOS(osId);
+        if (!os.getStatus().permiteCancelamento()) {
+            throw new ConflitoException("Não é possível cancelar uma OS com status " + os.getStatus() + ".");
+        }
+        StatusOS statusAnterior = os.getStatus();
+        if (os.getStatus().estoqueBaixado()) {
+            for (ServicoDaOficina servico : os.getServicos()) {
+                devolverEstoqueDaLoja(servico);
+            }
+        }
+        os.alterarStatus(StatusOS.CANCELADA);
+        ordemDeServicoDAO.save(os);
+        registrarHistorico(os, statusAnterior, StatusOS.CANCELADA);
+        return OrdemDeServicoMapper.toResponse(os);
+    }
+
+    /**
+     * Fecha a OS sem registrar a forma de pagamento.
      */
     @Transactional
     public OrcamentoResponseVO fecharOS(Long osId) {
+        return fecharOS(osId, null);
+    }
+
+    /**
+     * Fecha a OS, registra o pagamento, congela o orçamento e agenda a próxima revisão.
+     */
+    @Transactional
+    public OrcamentoResponseVO fecharOS(Long osId, FormaPagamento formaPagamento) {
         OrdemDeServico os = encontrarOS(osId);
+        if (os.getServicos().isEmpty()) {
+            throw new ConflitoException("Não é possível fechar uma OS sem serviços.");
+        }
         OrcamentoResponseVO orcamento = calcularOrcamento(os);
 
-        // Congela o orçamento: alterações posteriores em peças não mudam o valor cobrado.
         os.setTotalPecas(orcamento.getTotalPecas());
         os.setTotalMaoDeObra(orcamento.getTotalMaoDeObra());
         os.setDescontoAplicado(orcamento.getDescontoAplicado());
         os.setTotalFinal(orcamento.getTotalFinal());
+        if (formaPagamento != null) {
+            os.setFormaPagamento(formaPagamento);
+        }
 
         if (os.getStatus() != StatusOS.CONCLUIDA) {
             StatusOS statusAnterior = os.getStatus();
@@ -224,6 +396,19 @@ public class OrdemDeServicoBO {
 
         ordemDeServicoDAO.save(os);
         return orcamento;
+    }
+
+    /**
+     * Gera o comprovante interno imprimível (HTML) de uma OS fechada.
+     */
+    @Transactional(readOnly = true)
+    public String gerarComprovante(Long osId) {
+        OrdemDeServico os = encontrarOS(osId);
+        if (os.getStatus() != StatusOS.FECHADA) {
+            throw new ConflitoException(
+                    "O comprovante só pode ser gerado para uma OS FECHADA.");
+        }
+        return ComprovanteRenderer.render(os);
     }
 
     @Transactional(readOnly = true)

@@ -5,6 +5,7 @@ import br.com.motoservices.vo.MotoRequestVO;
 import br.com.motoservices.vo.MotoResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -60,10 +61,20 @@ public class MotoController {
         return ResponseEntity.ok(motoBO.buscarPorId(motoId));
     }
 
-    @Operation(summary = "Filtrar motos por faixa de cilindradas")
+    @Operation(summary = "Filtrar motos por faixa de cilindradas",
+            description = "Os dois parâmetros são obrigatórios e os limites são inclusivos: "
+                    + "`minimo` deve ser positivo e `maximo` deve ser maior ou igual a `minimo`. "
+                    + "Resultado paginado e ordenado por `cilindradas` (asc).")
+    @ApiResponse(responseCode = "400", description = "Parâmetro ausente ou faixa inválida",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemDetail.class)))
     @GetMapping("/filtrar")
     public ResponseEntity<PaginaResponseVO<MotoResponseVO>> filtrarPorCilindradas(
+            @Parameter(name = "minimo", description = "Cilindrada mínima (inclusive); deve ser > 0",
+                    example = "1", required = true)
             @RequestParam int minimo,
+            @Parameter(name = "maximo", description = "Cilindrada máxima (inclusive); deve ser >= minimo",
+                    example = "2000", required = true)
             @RequestParam int maximo,
             @PageableDefault(size = 20, sort = "cilindradas") Pageable pageable) {
         return ResponseEntity.ok(motoBO.filtrarPorCilindradas(minimo, maximo, pageable));

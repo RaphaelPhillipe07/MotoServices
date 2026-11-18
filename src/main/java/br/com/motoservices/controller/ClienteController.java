@@ -6,6 +6,7 @@ import br.com.motoservices.vo.ClienteResponseVO;
 import br.com.motoservices.vo.MotoResponseVO;
 import br.com.motoservices.vo.PaginaResponseVO;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -63,12 +65,25 @@ public class ClienteController {
     }
 
     @Operation(summary = "Buscar clientes",
-            description = "Busca por nome (paginada) ou por CPF/CNPJ (retorna no máximo um item).")
+            description = "Sem `nomeOuCpf`, lista todos os clientes. Com 11/14 dígitos, busca "
+                    + "documento exato (no máximo um item); caso contrário, busca por nome (paginada).")
     @GetMapping
     public ResponseEntity<PaginaResponseVO<ClienteResponseVO>> buscar(
-            @RequestParam String nomeOuCpf,
+            @Parameter(description = "Nome ou CPF/CNPJ; opcional para listar todos")
+            @RequestParam(required = false) String nomeOuCpf,
             @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
         return ResponseEntity.ok(clienteBO.buscar(nomeOuCpf, pageable));
+    }
+
+    @Operation(summary = "Listar próximas revisões",
+            description = "Clientes com revisão agendada entre hoje e hoje + `dias`.")
+    @GetMapping("/revisoes-proximas")
+    public ResponseEntity<PaginaResponseVO<ClienteResponseVO>> listarProximasRevisoes(
+            @Parameter(description = "Horizonte em dias (1 a 365)", example = "30")
+            @RequestParam(defaultValue = "30") int dias,
+            @PageableDefault(size = 20, sort = "proximaRevisao", direction = Sort.Direction.ASC)
+            Pageable pageable) {
+        return ResponseEntity.ok(clienteBO.listarProximasRevisoes(dias, pageable));
     }
 
     @Operation(summary = "Listar motos do cliente")

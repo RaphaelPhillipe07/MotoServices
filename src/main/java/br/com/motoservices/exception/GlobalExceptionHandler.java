@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -63,6 +64,25 @@ public class GlobalExceptionHandler {
         return conflito(ex, request);
     }
 
+    @ExceptionHandler(ConflitoException.class)
+    public ProblemDetail handleConflito(ConflitoException ex, HttpServletRequest request) {
+        return conflito(ex, request);
+    }
+
+    @ExceptionHandler(ServicoNaoEncontradoException.class)
+    public ProblemDetail handleServicoNaoEncontrado(ServicoNaoEncontradoException ex,
+                                                    HttpServletRequest request) {
+        return naoEncontrado(ex, request);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ProblemDetail handleConcorrencia(OptimisticLockingFailureException ex,
+                                            HttpServletRequest request) {
+        log.warn("Conflito de concorrência: {}", ex.getMessage());
+        return problema(HttpStatus.CONFLICT, "conflito", "Conflito de estado",
+                "A OS ou o estoque foi alterado por outra operação. Tente novamente.", request);
+    }
+
     @ExceptionHandler(TransicaoStatusInvalidaException.class)
     public ProblemDetail handleTransicaoInvalida(TransicaoStatusInvalidaException ex, HttpServletRequest request) {
         return conflito(ex, request);
@@ -71,6 +91,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ValidacaoException.class)
     public ProblemDetail handleValidacao(ValidacaoException ex, HttpServletRequest request) {
         return problema(HttpStatus.BAD_REQUEST, "validacao", "Dados inválidos", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(CredenciaisInvalidasException.class)
+    public ProblemDetail handleCredenciaisInvalidas(CredenciaisInvalidasException ex,
+                                                    HttpServletRequest request) {
+        return problema(HttpStatus.UNAUTHORIZED, "nao-autenticado", "Não autenticado",
+                ex.getMessage(), request);
     }
 
     // ---------- validação de entrada ----------

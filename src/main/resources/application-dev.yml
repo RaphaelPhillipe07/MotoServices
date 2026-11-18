@@ -12,6 +12,14 @@ spring:
       hibernate:
         format_sql: true
 
+# Segredo e senha inicial apenas para desenvolvimento local.
+motoservices:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:dev-motoservices-jwt-secret-nao-use-em-producao-0123456789}
+    admin:
+      senha: ${ADMIN_PASSWORD:admin123}
+
 logging:
   level:
     org.hibernate.SQL: debug

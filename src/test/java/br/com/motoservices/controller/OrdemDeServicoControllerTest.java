@@ -10,6 +10,7 @@ import br.com.motoservices.vo.ServicoRequestVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Pageable;
@@ -21,16 +22,19 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrdemDeServicoController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class OrdemDeServicoControllerTest {
 
     @Autowired
@@ -41,7 +45,7 @@ class OrdemDeServicoControllerTest {
 
     private OrdemDeServicoResponseVO os(StatusOS status) {
         return new OrdemDeServicoResponseVO(1L, 1L, "Maria", 1L, "Honda", "CG", 160,
-                status, LocalDateTime.now(), null, null, null, null, null);
+                status, LocalDateTime.now(), null, null, null, null, null, null, List.of());
     }
 
     @Test
@@ -84,7 +88,7 @@ class OrdemDeServicoControllerTest {
     @Test
     @DisplayName("histórico por cliente devolve envelope paginado")
     void listarPorCliente() throws Exception {
-        when(ordemDeServicoBO.listarPorCliente(eq(1L), any(Pageable.class)))
+        when(ordemDeServicoBO.listar(eq(1L), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PaginaResponseVO<>(
                         List.of(os(StatusOS.ABERTA)), 0, 20, 1, 1, true, true));
 
@@ -142,5 +146,18 @@ class OrdemDeServicoControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].statusNovo").value("ABERTA"))
                 .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("transição operacional de status devolve a OS atualizada")
+    void alterarStatus() throws Exception {
+        when(ordemDeServicoBO.alterarStatus(1L, StatusOS.AGUARDANDO_CLIENTE))
+                .thenReturn(os(StatusOS.AGUARDANDO_CLIENTE));
+
+        mockMvc.perform(patch("/ordens-servico/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"AGUARDANDO_CLIENTE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AGUARDANDO_CLIENTE"));
     }
 }

@@ -26,6 +26,9 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/motoservices
       DB_USER: motoservices
       DB_PASS: motoservices
+      # Troque os dois valores abaixo antes de expor o serviço.
+      JWT_SECRET: ${JWT_SECRET:-motoservices-compose-jwt-secret-troque-antes-de-produzir-123456}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     ports:
       - "8080:8080"
     restart: unless-stopped

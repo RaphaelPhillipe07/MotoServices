@@ -1,12 +1,14 @@
 package br.com.motoservices.controller;
 
 import br.com.motoservices.bo.ClienteBO;
+import br.com.motoservices.bo.MotoBO;
 import br.com.motoservices.bo.OrdemDeServicoBO;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.vo.ClienteRequestVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -22,7 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({ClienteController.class, OrdemDeServicoController.class})
+@WebMvcTest({ClienteController.class, OrdemDeServicoController.class, MotoController.class})
+@AutoConfigureMockMvc(addFilters = false)
 class ErrorContractTest {
 
     @Autowired
@@ -33,6 +36,9 @@ class ErrorContractTest {
 
     @MockBean
     private OrdemDeServicoBO ordemDeServicoBO;
+
+    @MockBean
+    private MotoBO motoBO;
 
     @Test
     @DisplayName("Bean Validation devolve ProblemDetail com lista de erros por campo")
@@ -64,9 +70,9 @@ class ErrorContractTest {
     @Test
     @DisplayName("parâmetro obrigatório ausente retorna 400 identificando o nome")
     void parametroAusente() throws Exception {
-        mockMvc.perform(get("/clientes"))
+        mockMvc.perform(get("/motos/filtrar"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("Parâmetro obrigatório ausente: nomeOuCpf."));
+                .andExpect(jsonPath("$.detail").value("Parâmetro obrigatório ausente: minimo."));
     }
 
     @Test

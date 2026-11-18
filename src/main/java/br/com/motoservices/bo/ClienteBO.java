@@ -3,6 +3,7 @@ package br.com.motoservices.bo;
 import br.com.motoservices.dao.ClienteDAO;
 import br.com.motoservices.dao.MotoDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.MotoInvalidaException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.mapper.ClienteMapper;
@@ -62,7 +63,7 @@ public class ClienteBO {
             throw new ValidacaoException("CPF/CNPJ inválido.");
         }
         if (clienteDAO.findByCpfCnpj(documento).isPresent()) {
-            throw new ValidacaoException("Já existe cliente cadastrado com este CPF/CNPJ.");
+            throw new ConflitoException("Já existe cliente cadastrado com este CPF/CNPJ.");
         }
 
         return ClienteMapper.toResponse(clienteDAO.save(ClienteMapper.toEntity(request)));
@@ -70,7 +71,12 @@ public class ClienteBO {
 
     @Transactional(readOnly = true)
     public PaginaResponseVO<ClienteResponseVO> buscar(String nomeOuCpf, Pageable pageable) {
-        String termo = exigirTexto(nomeOuCpf, "nomeOuCpf").trim();
+        Pageable paginacao = pageable == null ? PageRequest.of(0, 20) : pageable;
+        if (nomeOuCpf == null || nomeOuCpf.isBlank()) {
+            return PaginaResponseVO.de(clienteDAO.findAll(paginacao), ClienteMapper::toResponse);
+        }
+
+        String termo = nomeOuCpf.trim();
         String documento = Documento.normalizar(termo);
 
         if (!documento.isEmpty() && (documento.length() == 11 || documento.length() == 14)) {
@@ -83,9 +89,23 @@ public class ClienteBO {
             return PaginaResponseVO.de(encontrados, 0, Math.max(encontrados.size(), 1));
         }
 
-        Pageable paginacao = pageable == null ? PageRequest.of(0, 20) : pageable;
         return PaginaResponseVO.de(
                 clienteDAO.findByNomeContainingIgnoreCase(termo, paginacao),
+                ClienteMapper::toResponse);
+    }
+
+    /**
+     * Clientes com revisão agendada entre hoje e hoje + {@code dias}.
+     */
+    @Transactional(readOnly = true)
+    public PaginaResponseVO<ClienteResponseVO> listarProximasRevisoes(int dias, Pageable pageable) {
+        if (dias < 1 || dias > 365) {
+            throw new ValidacaoException("O horizonte de dias deve estar entre 1 e 365.");
+        }
+        Pageable paginacao = pageable == null ? PageRequest.of(0, 20) : pageable;
+        LocalDate hoje = LocalDate.now();
+        return PaginaResponseVO.de(
+                clienteDAO.findByProximaRevisaoBetween(hoje, hoje.plusDays(dias), paginacao),
                 ClienteMapper::toResponse);
     }
 

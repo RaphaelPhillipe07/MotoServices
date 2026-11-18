@@ -1,6 +1,7 @@
 package br.com.motoservices.bo;
 
 import br.com.motoservices.dao.MotoDAO;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.MotoInvalidaException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.mapper.MotoMapper;
@@ -34,12 +35,16 @@ public class MotoBO {
 
     @Transactional(readOnly = true)
     public MotoResponseVO buscarPorId(Long motoId) {
+        return MotoMapper.toResponse(encontrarMotoPorId(motoId));
+    }
+
+    @Transactional(readOnly = true)
+    public Moto encontrarMotoPorId(Long motoId) {
         if (motoId == null) {
             throw new ValidacaoException("ID da moto é obrigatório.");
         }
-        Moto moto = motoDAO.findById(motoId)
+        return motoDAO.findById(motoId)
                 .orElseThrow(() -> new MotoInvalidaException("Moto não encontrada: " + motoId));
-        return MotoMapper.toResponse(moto);
     }
 
     @Transactional
@@ -54,7 +59,7 @@ public class MotoBO {
             throw new ValidacaoException("Cilindradas devem ser um número positivo.");
         }
         if (motoDAO.findByMarcaIgnoreCaseAndModeloIgnoreCase(marca, modelo).isPresent()) {
-            throw new ValidacaoException("Já existe uma moto cadastrada para " + marca + " " + modelo + ".");
+            throw new ConflitoException("Já existe uma moto cadastrada para " + marca + " " + modelo + ".");
         }
 
         return MotoMapper.toResponse(motoDAO.save(MotoMapper.toEntity(request)));

@@ -33,7 +33,11 @@ class MigrationsTest {
             "idx_troca_peca_peca",
             "idx_moto_cilindradas",
             "uk_moto_marca_modelo",
-            "idx_cliente_nome_trgm"
+            "idx_cliente_nome_trgm",
+            "idx_cliente_proxima_revisao",
+            "idx_os_data_fechamento",
+            "idx_os_status_fechamento",
+            "idx_usuario_username"
     );
 
     private static final Set<String> CHECKS_ESPERADOS = Set.of(
@@ -41,7 +45,8 @@ class MigrationsTest {
             "ck_peca_estoque_nao_negativo",
             "ck_peca_estoque_minimo_nao_negativo",
             "ck_servico_valor_base_nao_negativo",
-            "ck_os_status_valido"
+            "ck_os_status_valido",
+            "ck_usuario_papel"
     );
 
     @Test
@@ -58,7 +63,7 @@ class MigrationsTest {
                     .load()
                     .migrate();
 
-            assertEquals(6, resultado.migrationsExecuted, "V1 a V6 devem ser aplicadas");
+            assertEquals(8, resultado.migrationsExecuted, "V1 a V8 devem ser aplicadas");
 
             try (Connection conexao = dataSource.getConnection()) {
                 assertTrue(consultar(conexao,
@@ -87,7 +92,8 @@ class MigrationsTest {
                         "SELECT column_name FROM information_schema.columns "
                                 + "WHERE table_schema = 'motoservices' AND table_name = 'tb_ordem_de_servico'");
                 assertTrue(colunasOs.containsAll(Set.of(
-                                "total_pecas", "total_mao_de_obra", "desconto_aplicado", "total_final")),
+                                "total_pecas", "total_mao_de_obra", "desconto_aplicado", "total_final",
+                                "forma_pagamento")),
                         "V4 deve adicionar as colunas de snapshot do orçamento");
 
                 assertTrue(consultar(conexao,
@@ -101,6 +107,18 @@ class MigrationsTest {
                                         + "WHERE table_schema = 'motoservices'")
                                 .contains("tb_cliente_moto"),
                         "V6 deve criar a tabela de vínculo cliente-moto");
+
+                assertTrue(consultar(conexao,
+                                "SELECT table_name FROM information_schema.tables "
+                                        + "WHERE table_schema = 'motoservices'")
+                                .contains("tb_usuario"),
+                        "V8 deve criar a tabela de usuários");
+
+                assertTrue(consultar(conexao,
+                                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                                        + "WHERE conname = 'ck_os_status_valido'")
+                                .stream().anyMatch(definicao -> definicao.contains("CANCELADA")),
+                        "V7 deve incluir CANCELADA no CHECK de status");
 
                 assertThrows(SQLException.class, () -> executar(conexao,
                                 "INSERT INTO motoservices.tb_peca "

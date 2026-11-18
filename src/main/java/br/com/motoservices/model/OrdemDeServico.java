@@ -1,7 +1,9 @@
 package br.com.motoservices.model;
 
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.TransicaoStatusInvalidaException;
 import br.com.motoservices.exception.ValidacaoException;
+import br.com.motoservices.model.enums.FormaPagamento;
 import br.com.motoservices.model.enums.StatusOS;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -60,6 +62,11 @@ public class OrdemDeServico {
     @Column(name = "data_fechamento")
     private LocalDateTime dataFechamento;
 
+    /** Forma de pagamento informada no fechamento; nula enquanto não houver pagamento. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "forma_pagamento")
+    private FormaPagamento formaPagamento;
+
     /**
      * Snapshot imutável do orçamento no momento do fechamento.
      * Nulo enquanto a OS não foi fechada.
@@ -83,7 +90,7 @@ public class OrdemDeServico {
     public void adicionarServico(ServicoDaOficina servico) {
         Objects.requireNonNull(servico, "Serviço é obrigatório");
         if (status != null && !status.permiteAdicionarServico()) {
-            throw new ValidacaoException(
+            throw new ConflitoException(
                     "Não é possível adicionar serviços a uma OS com status " + status + ".");
         }
         servico.setOrdemDeServico(this);

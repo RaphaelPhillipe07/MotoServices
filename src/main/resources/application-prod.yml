@@ -12,6 +12,15 @@ spring:
       hibernate:
         format_sql: false
 
+# Sem valores padrão: JWT_SECRET é obrigatório e ADMIN_PASSWORD só é usada
+# quando a tabela de usuários está vazia.
+motoservices:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+    admin:
+      senha: ${ADMIN_PASSWORD:}
+
 # Documentação interativa desabilitada em produção.
 springdoc:
   api-docs:

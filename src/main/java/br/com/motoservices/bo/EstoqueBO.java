@@ -1,6 +1,7 @@
 package br.com.motoservices.bo;
 
 import br.com.motoservices.dao.PecaDAO;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.EstoqueInsuficienteException;
 import br.com.motoservices.exception.PecaNaoEncontradaException;
 import br.com.motoservices.exception.ValidacaoException;
@@ -38,7 +39,7 @@ public class EstoqueBO {
         exigirNaoNegativo(request.getEstoqueMinimo(), "estoqueMinimo");
 
         if (pecaDAO.findByCodigo(codigo).isPresent()) {
-            throw new ValidacaoException("Já existe peça cadastrada com o código " + codigo + ".");
+            throw new ConflitoException("Já existe peça cadastrada com o código " + codigo + ".");
         }
         return PecaMapper.toResponse(pecaDAO.save(PecaMapper.toEntity(request)));
     }
@@ -108,6 +109,21 @@ public class EstoqueBO {
             throw new EstoqueInsuficienteException(
                     "Estoque insuficiente para a peça " + peca.getCodigo()
                             + ": saldo alterado concorrentemente, solicitado " + quantidade + ".");
+        }
+    }
+
+    /**
+     * Devolve ao estoque unidades previamente baixadas (cancelamento/remoção de serviço).
+     */
+    @Transactional
+    public void devolverEstoque(Long pecaId, int quantidade) {
+        if (quantidade <= 0) {
+            throw new ValidacaoException("Quantidade a devolver deve ser positiva.");
+        }
+        Peca peca = encontrarPeca(pecaId);
+        int linhasAfetadas = pecaDAO.devolverEstoque(pecaId, quantidade);
+        if (linhasAfetadas == 0) {
+            throw new PecaNaoEncontradaException("Peça não encontrada: " + peca.getId());
         }
     }
 

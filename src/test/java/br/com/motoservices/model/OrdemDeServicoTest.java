@@ -1,7 +1,7 @@
 package br.com.motoservices.model;
 
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.TransicaoStatusInvalidaException;
-import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.enums.StatusOS;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,7 +64,7 @@ class OrdemDeServicoTest {
     void osEncerradaNaoAceitaServico() {
         OrdemDeServico os = osComStatus(StatusOS.CONCLUIDA);
 
-        assertThrows(ValidacaoException.class, () -> os.adicionarServico(revisao()));
+        assertThrows(ConflitoException.class, () -> os.adicionarServico(revisao()));
     }
 
     @Test

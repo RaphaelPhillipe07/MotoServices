@@ -4,6 +4,7 @@ import br.com.motoservices.dao.ClienteDAO;
 import br.com.motoservices.dao.MotoDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
 import br.com.motoservices.exception.MotoInvalidaException;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.Cliente;
 import br.com.motoservices.model.Moto;
@@ -101,7 +102,7 @@ class ClienteBOTest {
         when(clienteDAO.findByCpfCnpj(CPF_VALIDO))
                 .thenReturn(Optional.of(new Cliente(1L, "Outra", CPF_VALIDO, "x", null, null)));
 
-        assertThrows(ValidacaoException.class,
+        assertThrows(ConflitoException.class,
                 () -> clienteBO.cadastrar(vo("Maria", CPF_VALIDO)));
     }
 
@@ -234,5 +235,42 @@ class ClienteBOTest {
         assertEquals(2, pagina.getContent().size());
         assertEquals("Honda", pagina.getContent().get(0).getMarca());
         assertEquals("Yamaha", pagina.getContent().get(1).getMarca());
+    }
+
+    @Test
+    @DisplayName("buscar sem termo lista todos os clientes")
+    void buscaSemTermoListaTodos() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(clienteDAO.findAll(pageable))
+                .thenReturn(new PageImpl<>(List.of(new Cliente(1L, "Maria", CPF_VALIDO, "119", null, null))));
+
+        PaginaResponseVO<ClienteResponseVO> resultado = clienteBO.buscar("  ", pageable);
+
+        assertEquals(1, resultado.getContent().size());
+        verify(clienteDAO).findAll(pageable);
+    }
+
+    @Test
+    @DisplayName("próximas revisões filtram pela janela de dias")
+    void listaProximasRevisoes() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(clienteDAO.findByProximaRevisaoBetween(any(LocalDate.class), any(LocalDate.class),
+                any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(new Cliente(1L, "Maria", CPF_VALIDO, "119",
+                        LocalDate.now().plusDays(5), null))));
+
+        PaginaResponseVO<ClienteResponseVO> resultado = clienteBO.listarProximasRevisoes(30, pageable);
+
+        assertEquals(1, resultado.getContent().size());
+        assertTrue(resultado.getContent().get(0).getProximaRevisao().isAfter(LocalDate.now()));
+    }
+
+    @Test
+    @DisplayName("janela de revisões fora de 1..365 é rejeitada")
+    void janelaDeRevisoesInvalida() {
+        Pageable pageable = PageRequest.of(0, 20);
+
+        assertThrows(ValidacaoException.class, () -> clienteBO.listarProximasRevisoes(0, pageable));
+        assertThrows(ValidacaoException.class, () -> clienteBO.listarProximasRevisoes(366, pageable));
     }
 }

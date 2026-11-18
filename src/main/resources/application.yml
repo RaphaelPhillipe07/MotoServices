@@ -31,6 +31,19 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+# Autenticação: segredos vêm dos perfis (dev/prod) ou do ambiente.
+motoservices:
+  security:
+    jwt:
+      issuer: motoservices
+      expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
+    admin:
+      habilitado: ${ADMIN_BOOTSTRAP:true}
+      username: ${ADMIN_USERNAME:admin}
+      nome: ${ADMIN_NOME:Administrador}
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+
 management:
   endpoints:
     web:

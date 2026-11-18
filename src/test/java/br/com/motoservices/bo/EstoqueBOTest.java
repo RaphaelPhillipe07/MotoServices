@@ -3,6 +3,7 @@ package br.com.motoservices.bo;
 import br.com.motoservices.dao.PecaDAO;
 import br.com.motoservices.exception.EstoqueInsuficienteException;
 import br.com.motoservices.exception.PecaNaoEncontradaException;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.ValidacaoException;
 import br.com.motoservices.model.Peca;
 import br.com.motoservices.vo.PaginaResponseVO;
@@ -143,7 +144,7 @@ class EstoqueBOTest {
     void cadastroCodigoDuplicado() {
         when(pecaDAO.findByCodigo("P-001")).thenReturn(Optional.of(peca(1)));
 
-        assertThrows(ValidacaoException.class, () -> estoqueBO.cadastrar(new PecaRequestVO(
+        assertThrows(ConflitoException.class, () -> estoqueBO.cadastrar(new PecaRequestVO(
                 "P-001", "Outra descrição", new BigDecimal("10.00"), 1, 1)));
         verify(pecaDAO, never()).save(any());
     }

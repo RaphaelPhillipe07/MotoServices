@@ -3,6 +3,7 @@ package br.com.motoservices.bo;
 import br.com.motoservices.dao.HistoricoStatusOSDAO;
 import br.com.motoservices.dao.OrdemDeServicoDAO;
 import br.com.motoservices.exception.ClienteNaoEncontradoException;
+import br.com.motoservices.exception.ConflitoException;
 import br.com.motoservices.exception.EstoqueInsuficienteException;
 import br.com.motoservices.exception.MotoInvalidaException;
 import br.com.motoservices.exception.OrdemDeServicoNaoEncontradaException;
@@ -256,7 +257,7 @@ class OrdemDeServicoBOTest {
     void testeListarPorCliente() {
         when(clienteBO.encontrarCliente(CLIENTE_ID)).thenReturn(cliente());
         Pageable pageable = PageRequest.of(0, 20);
-        when(ordemDeServicoDAO.findByClienteId(CLIENTE_ID, pageable))
+        when(ordemDeServicoDAO.buscarComFiltros(CLIENTE_ID, null, null, pageable))
                 .thenReturn(new PageImpl<>(List.of(os(StatusOS.ABERTA, 300))));
 
         PaginaResponseVO<OrdemDeServicoResponseVO> pagina =
@@ -265,6 +266,19 @@ class OrdemDeServicoBOTest {
         assertEquals(1, pagina.getContent().size());
         assertEquals(CLIENTE_ID, pagina.getContent().get(0).getClienteId());
         assertEquals(1, pagina.getTotalElements());
+    }
+
+    @Test
+    @DisplayName("detalhe da OS inclui serviços com valor final")
+    void testeBuscarPorIdIncluiServicos() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 500, revisao("100.00"));
+        stubOS(os);
+
+        OrdemDeServicoResponseVO response = ordemDeServicoBO.buscarPorId(OS_ID);
+
+        assertEquals(1, response.getServicos().size());
+        assertEquals(TipoServico.REVISAO, response.getServicos().get(0).getTipo());
+        assertEquals(new BigDecimal("150.00"), response.getServicos().get(0).getValorFinal());
     }
 
     @Test
@@ -444,5 +458,113 @@ class OrdemDeServicoBOTest {
         assertEquals(1, pagina.getContent().size());
         assertEquals(StatusOS.ABERTA, pagina.getContent().get(0).getStatusNovo());
         assertEquals(OS_ID, pagina.getContent().get(0).getOsId());
+    }
+
+    @Test
+    @DisplayName("cancelar antes da confirmação não movimenta estoque")
+    void testeCancelarSemBaixa() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 300, troca(1, "100.00", true));
+        stubOS(os);
+
+        OrdemDeServicoResponseVO cancelada = ordemDeServicoBO.cancelarOS(OS_ID);
+
+        assertEquals(StatusOS.CANCELADA, cancelada.getStatus());
+        assertNotNull(os.getDataFechamento());
+        verify(estoqueBO, never()).baixarEstoque(anyLong(), anyInt());
+        verify(estoqueBO, never()).devolverEstoque(anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("cancelar depois da confirmação devolve o estoque da peça da loja")
+    void testeCancelarComBaixa() {
+        OrdemDeServico os = os(StatusOS.EM_ANDAMENTO, 300, troca(1, "100.00", true));
+        stubOS(os);
+
+        ordemDeServicoBO.cancelarOS(OS_ID);
+
+        assertEquals(StatusOS.CANCELADA, os.getStatus());
+        verify(estoqueBO).devolverEstoque(1L, 1);
+        verify(historicoStatusOSDAO).save(any(HistoricoStatusOS.class));
+    }
+
+    @Test
+    @DisplayName("não confirma OS sem serviços")
+    void testeConfirmarSemServicos() {
+        OrdemDeServico os = os(StatusOS.ABERTA, 300);
+        stubOS(os);
+
+        assertThrows(ConflitoException.class, () -> ordemDeServicoBO.confirmarOS(OS_ID));
+        verify(estoqueBO, never()).baixarEstoque(anyLong(), anyInt());
+        verify(ordemDeServicoDAO, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("não fecha OS sem serviços")
+    void testeFecharSemServicos() {
+        OrdemDeServico os = os(StatusOS.EM_ANDAMENTO, 300);
+        stubOS(os);
+
+        assertThrows(ConflitoException.class, () -> ordemDeServicoBO.fecharOS(OS_ID));
+        verify(ordemDeServicoDAO, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("remover serviço confirmado devolve a peça da loja")
+    void testeRemoverServicoComBaixa() {
+        ServicoTrocaPeca servico = troca(1, "100.00", true);
+        servico.setId(10L);
+        OrdemDeServico os = os(StatusOS.EM_ANDAMENTO, 300, servico);
+        stubOS(os);
+
+        OrdemDeServicoResponseVO resposta = ordemDeServicoBO.removerServico(OS_ID, 10L);
+
+        assertTrue(resposta.getServicos().isEmpty());
+        verify(estoqueBO).devolverEstoque(1L, 1);
+        verify(ordemDeServicoDAO).save(os);
+    }
+
+    @Test
+    @DisplayName("atualizar serviço mantém o tipo e persiste as alterações")
+    void testeAtualizarServico() {
+        ServicoRevisao servico = revisao("100.00");
+        servico.setId(11L);
+        OrdemDeServico os = os(StatusOS.ABERTA, 300, servico);
+        stubOS(os);
+
+        ServicoRequestVO request = new ServicoRequestVO(TipoServico.REVISAO, "Revisão completa", 90,
+                new BigDecimal("120.00"), false, null, null);
+        OrdemDeServicoResponseVO response = ordemDeServicoBO.atualizarServico(OS_ID, 11L, request);
+
+        assertEquals("Revisão completa", response.getServicos().get(0).getDescricao());
+        assertEquals(new BigDecimal("120.00"), response.getServicos().get(0).getValorBaseMaoDeObra());
+        verify(ordemDeServicoDAO).save(os);
+    }
+
+    @Test
+    @DisplayName("alterar status operacional registra histórico")
+    void testeAlterarStatus() {
+        OrdemDeServico os = os(StatusOS.EM_ANDAMENTO, 300);
+        stubOS(os);
+
+        OrdemDeServicoResponseVO response =
+                ordemDeServicoBO.alterarStatus(OS_ID, StatusOS.AGUARDANDO_CLIENTE);
+
+        assertEquals(StatusOS.AGUARDANDO_CLIENTE, response.getStatus());
+        verify(historicoStatusOSDAO).save(any(HistoricoStatusOS.class));
+    }
+
+    @Test
+    @DisplayName("listar com filtro de moto valida a moto e delega ao DAO")
+    void testeListarPorMoto() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(motoBO.encontrarMotoPorId(1L)).thenReturn(moto(300));
+        when(ordemDeServicoDAO.buscarComFiltros(null, 1L, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(os(StatusOS.ABERTA, 300))));
+
+        PaginaResponseVO<OrdemDeServicoResponseVO> pagina =
+                ordemDeServicoBO.listar(null, 1L, null, pageable);
+
+        assertEquals(1, pagina.getContent().size());
+        verify(motoBO).encontrarMotoPorId(1L);
     }
 }
